@@ -27,7 +27,7 @@ const LoginScreen = ({ navigation }) => {
     try {
       const response = await createUserWithEmailAndPassword(FIREBASE_AUTH, email, password);
       console.log(response);
-      alert('Check your emails!');
+      alert('Account has been crrated!');
     } catch (error) {
       console.log(error);
       alert('Sign up failed ' + error.message);
@@ -40,7 +40,7 @@ const LoginScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.formContainer}>
         <Image
-          source={require('../assets/images/MahjongLah-logo.jpg')}
+          source={require('../assets/images/MahjongLah-logo.jpg')} //logo image here
           style={styles.logo}
         />
 

@@ -21,13 +21,13 @@ const HomeScreen = () => {
             <Text style={{ fontSize: 28, color: 'white' }}>☰</Text>
           </TouchableOpacity>
           <Image
-            source={require('../../assets/images/MahjongLah-logo.jpg')}
+            source={require('../../assets/images/MahjongLah-logo.jpg')} // logo here
             style={styles.headerLogo}
             resizeMode="contain"
           />
           <TouchableOpacity style={styles.headerIcon}>
             <Image
-              source={require('../../assets/images/boy1.png')} // ADD THIS IMAGE to assets/images
+              source={require('../../assets/images/boy1.png')} // boy image in assets/images
               style={styles.profileImage}
             />
           </TouchableOpacity>
@@ -37,7 +37,7 @@ const HomeScreen = () => {
         <View style={styles.gameCardsContainer}>
           <TouchableOpacity style={styles.gameCard}>
             <Image
-              source={require('../../assets/images/tiles(home).png')} // ADD THIS IMAGE to assets/images
+              source={require('../../assets/images/tiles(home).png')} // tiles image in assets/images
               style={styles.gameCardImage}
               resizeMode="contain"
             />
@@ -45,7 +45,7 @@ const HomeScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity style={styles.gameCard}>
             <Image
-              source={require('../../assets/images/13.png')} // ADD THIS IMAGE to assets/images
+              source={require('../../assets/images/13.png')} // image in assets/images
               style={styles.gameCardImage}
               resizeMode="contain"
             />
@@ -58,28 +58,28 @@ const HomeScreen = () => {
           <View style={styles.leaderboardHeader}>
             <Text style={styles.leaderboardTitle}>NUS Community Leaderboard</Text>
             <Image
-              source={require('../../assets/images/nus.png')} // ADD THIS IMAGE to assets/images
+              source={require('../../assets/images/nus.png')} // nus logo in assets/images
               style={styles.nusLogo}
               resizeMode="contain"
             />
           </View>
           {/* Leaderboard Items */}
           <View style={styles.leaderboardItem}>
-            <Image source={require('../../assets/images/boy1.png')} style={styles.leaderboardProfile} /> {/* ADD THIS IMAGE to assets/images */}
+            <Image source={require('../../assets/images/boy1.png')} style={styles.leaderboardProfile} /> {/* boy image in assets/images */}
             <View>
               <Text style={styles.leaderboardName}>Elynn Lee</Text>
               <Text style={styles.leaderboardEmail}>email@fakedomain.net</Text>
             </View>
           </View>
           <View style={styles.leaderboardItem}>
-            <Image source={require('../../assets/images/boy1.png')} style={styles.leaderboardProfile} /> {/* ADD THIS IMAGE to assets/images */}
+            <Image source={require('../../assets/images/boy1.png')} style={styles.leaderboardProfile} /> {/* bot image to assets/images */}
             <View>
               <Text style={styles.leaderboardName}>James Tan</Text>
               <Text style={styles.leaderboardEmail}>email@fakedomain.net</Text>
             </View>
           </View>
           <View style={styles.leaderboardItem}>
-            <Image source={require('../../assets/images/boy1.png')} style={styles.leaderboardProfile} /> {/* ADD THIS IMAGE to assets/images */}
+            <Image source={require('../../assets/images/boy1.png')} style={styles.leaderboardProfile} /> {/* boy image in assets/images */}
             <View>
               <Text style={styles.leaderboardName}>Elliot Chew</Text>
               <Text style={styles.leaderboardEmail}>email@fakedomain.net</Text>
@@ -93,7 +93,7 @@ const HomeScreen = () => {
         {/* AI Section */}
         <View style={styles.aiSection}>
           <Image
-            source={require('../../assets/images/robot.png')} // ADD THIS IMAGE to assets/images
+            source={require('../../assets/images/robot.png')} // robot image in assets/images
             style={styles.aiImage}
             resizeMode="contain"
           />
@@ -110,11 +110,11 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#386641', // Dark green background
+    backgroundColor: '#386641', // dark green background
   },
   scrollViewContent: {
     flexGrow: 1,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0, // Adjust padding for iOS bottom bar
+    paddingBottom: Platform.OS === 'ios' ? 20 : 0, 
   },
   header: {
     flexDirection: 'row',
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: '#386641', // Match container background
+    backgroundColor: '#386641', // match container background
   },
   headerIcon: {
     padding: 5,
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'lightgray', // Fallback color
+    backgroundColor: 'lightgray', // fallback color
   },
   gameCardsContainer: {
     flexDirection: 'row',
