@@ -40,7 +40,7 @@ const LoginScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.formContainer}>
         <Image
-          source={require('../assets/images/MahjongLah-logo.jpg')} //logo image here
+          source={require('../assets/images/mahjonglah!.png')} //logo image here
           style={styles.logo}
         />
 

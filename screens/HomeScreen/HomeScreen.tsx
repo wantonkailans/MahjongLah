@@ -9,9 +9,18 @@ import {
   ScrollView,
   Platform
 } from 'react-native';
-
+import { useNavigation } from '@react-navigation/native'; // <--- ADD THIS IMPORT
 
 const HomeScreen = () => {
+  const navigation = useNavigation(); // <--- ADD THIS LINE to get the navigation object
+
+  // --- ADD THIS FUNCTION ---
+  const handleStartNewGame = () => {
+    // Navigate to the 'StartGame' screen, as defined in App.js
+    navigation.navigate('StartGame'); //
+  };
+  // --- END ADDED FUNCTION ---
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
@@ -21,7 +30,7 @@ const HomeScreen = () => {
             <Text style={{ fontSize: 28, color: 'white' }}>☰</Text>
           </TouchableOpacity>
           <Image
-            source={require('../../assets/images/MahjongLah-logo.jpg')} // logo here
+            source={require('../../assets/images/mahjonglah!.png')} // logo here
             style={styles.headerLogo}
             resizeMode="contain"
           />
@@ -35,7 +44,8 @@ const HomeScreen = () => {
 
         {/* Game Cards */}
         <View style={styles.gameCardsContainer}>
-          <TouchableOpacity style={styles.gameCard}>
+          {/* Modify this TouchableOpacity to call the navigation function */}
+          <TouchableOpacity style={styles.gameCard} onPress={handleStartNewGame}> {/* <--- ADD onPress handler here */}
             <Image
               source={require('../../assets/images/tiles(home).png')} // tiles image in assets/images
               style={styles.gameCardImage}
@@ -114,7 +124,7 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     flexGrow: 1,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0, 
+    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
   },
   header: {
     flexDirection: 'row',
