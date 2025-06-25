@@ -1,3 +1,4 @@
+import { useRoute } from '@react-navigation/native';
 import React from 'react';
 import {
   SafeAreaView,
@@ -9,17 +10,17 @@ import {
   ScrollView,
   Platform
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native'; // <--- ADD THIS IMPORT
+import { useNavigation } from '@react-navigation/native'; 
 
 const HomeScreen = () => {
-  const navigation = useNavigation(); // <--- ADD THIS LINE to get the navigation object
+  const navigation = useNavigation(); 
+  const route = useRoute();
+  const { username } = route.params || {};
 
-  // --- ADD THIS FUNCTION ---
+ 
   const handleStartNewGame = () => {
-    // Navigate to the 'StartGame' screen, as defined in App.js
     navigation.navigate('StartGame'); //
   };
-  // --- END ADDED FUNCTION ---
 
   return (
     <SafeAreaView style={styles.container}>
@@ -41,6 +42,11 @@ const HomeScreen = () => {
             />
           </TouchableOpacity>
         </View>
+
+        {username && (
+          <Text style={styles.usernameGreeting}>Welcome, {username} 👋</Text>
+        )}
+
 
         {/* Game Cards */}
         <View style={styles.gameCardsContainer}>
@@ -267,6 +273,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  usernameGreeting: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+    textAlign: 'center',
+    marginVertical: 10,
+  },
+
 });
 
 export default HomeScreen;

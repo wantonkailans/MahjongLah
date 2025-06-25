@@ -1,81 +1,56 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import { View, TextInput, Button, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { FIREBASE_AUTH } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-      
-const LoginScreen = ({ navigation }) => {
+import { useNavigation } from '@react-navigation/native';
+
+export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-      
-  const login = async () => {
-    setLoading(true);
+  const navigation = useNavigation();
+
+  const handleLogin = async () => {
     try {
-      const response = await signInWithEmailAndPassword(FIREBASE_AUTH, email, password);
-      console.log(response);
+      await signInWithEmailAndPassword(FIREBASE_AUTH, email, password);
       navigation.navigate('Home');
     } catch (error) {
-      console.log(error);
-      alert('Sign in failed ' + error.message);
-    } finally {
-      setLoading(false);   
-    }   
-  }   
-      
-  const signup = async () => {
-    setLoading(true);
-    try {
-      const response = await createUserWithEmailAndPassword(FIREBASE_AUTH, email, password);
-      console.log(response);
-      alert('Account has been crrated!');
-    } catch (error) {
-      console.log(error);
-      alert('Sign up failed ' + error.message);
-    } finally {
-      setLoading(false);
+      alert(error.message);
     }
-  }
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.formContainer}>
-        <Image
-          source={require('../assets/images/mahjonglah!.png')} //logo image here
-          style={styles.logo}
-        />
+      <View style={styles.card}>
+        <Image source={require('../assets/images/mahjonglah!.png')} style={styles.logo} />
 
         <Text style={styles.title}>Welcome Back!</Text>
         <Text style={styles.subtitle}>Please login to continue</Text>
 
         <TextInput
-          style={styles.input}
           placeholder="Email"
           value={email}
           onChangeText={setEmail}
-          keyboardType="email-address"
-          placeholderTextColor="#999"
-        />
-
-        <TextInput
           style={styles.input}
+        />
+        <TextInput
           placeholder="Password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          placeholderTextColor="#999"
+          style={styles.input}
         />
 
-        <TouchableOpacity style={styles.button} onPress={login}>
+        <TouchableOpacity style={styles.blackButton} onPress={handleLogin}>
           <Text style={styles.buttonText}>Sign In</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.signupButton} onPress={signup}>
+        <TouchableOpacity style={styles.greenButton} onPress={() => navigation.navigate('Signup')}>
           <Text style={styles.buttonText}>Create Account</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -83,64 +58,56 @@ const styles = StyleSheet.create({
     backgroundColor: '#004d00',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
-  formContainer: {
-    width: '100%',
+  card: {
     backgroundColor: '#fff',
-    borderRadius: 20,
     padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 10,
+    borderRadius: 20,
+    width: '90%',
+    alignItems: 'center',
   },
   logo: {
-    width: 200,
-    height: 200,
-    alignSelf: 'center',
+    width: 150,
+    height: 50,
+    resizeMode: 'contain',
     marginBottom: 20,
   },
   title: {
-    fontSize: 24,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 10,
+    fontSize: 22,
+    marginBottom: 5,
   },
   subtitle: {
     fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 30,
-    color: '#555',
+    color: '#666',
+    marginBottom: 20,
   },
   input: {
-    height: 50,
+    width: '100%',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-    backgroundColor: '#f9f9f9',
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
   },
-  button: {
+  blackButton: {
     backgroundColor: '#000',
-    paddingVertical: 15,
-    borderRadius: 10,
-    marginBottom: 20,
+    borderRadius: 8,
+    padding: 12,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  signupButton: {
-    backgroundColor: '#28a745',
-    paddingVertical: 15,
-    borderRadius: 10,
+  greenButton: {
+    backgroundColor: '#2ecc71',
+    borderRadius: 8,
+    padding: 12,
+    width: '100%',
+    alignItems: 'center',
   },
   buttonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    fontSize: 16,
+    fontWeight: '600',
   },
 });
-
-export default LoginScreen;
 

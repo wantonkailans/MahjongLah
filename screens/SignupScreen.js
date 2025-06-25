@@ -1,55 +1,66 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Alert, Image } from 'react-native';
-import { auth } from '../firebase';
+import { View, TextInput, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { FIREBASE_AUTH } from '../firebase';
+import { useNavigation } from '@react-navigation/native';
 
-export default function SignupScreen({ navigation }) {
+export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const navigation = useNavigation();
 
-  const handleSignup = () => {
-    createUserWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        console.log('User registered with:', userCredential.user.email);
-        navigation.navigate('HomePage');  // After successful registration, navigate to homepage
-      })
-      .catch((error) => {
-        console.log(error);
-        Alert.alert("Registration failed", error.message);
-      });
+  const handleSignup = async () => {
+    if (!username.trim()) {
+      Alert.alert('Username is required');
+      return;
+    }
+
+    try {
+      await createUserWithEmailAndPassword(FIREBASE_AUTH, email, password);
+      Alert.alert('Account created!');
+      navigation.navigate('Home', { username });
+    } catch (error) {
+      Alert.alert('Signup failed', error.message);
+    }
   };
 
   return (
     <View style={styles.container}>
-      <Image source={require('../assets/images/mahjonglah!.png')} style={styles.logo} />
-      
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Sign up to continue using MahjongLah!</Text>
+      <View style={styles.card}>
+        <Image source={require('../assets/images/mahjonglah!.png')} style={styles.logo} />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
+        <Text style={styles.title}>Create Account!</Text>
+        <Text style={styles.subtitle}>Please fill in the details</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        <TextInput
+          placeholder="Username"
+          value={username}
+          onChangeText={setUsername}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+        />
 
-      <TouchableOpacity style={[styles.button, styles.continueButton]} onPress={handleSignup}>
-        <Text style={styles.buttonText}>Sign Up</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.blackButton} onPress={handleSignup}>
+          <Text style={styles.buttonText}>Sign Up</Text>
+        </TouchableOpacity>
 
-      <Text style={styles.termsText}>
-        By signing up, you agree to our <Text style={styles.linkText}>Terms & Conditions</Text>
-      </Text>
+        <TouchableOpacity style={styles.greenButton} onPress={() => navigation.navigate('Login')}>
+          <Text style={styles.buttonText}>Go to Login</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -57,68 +68,59 @@ export default function SignupScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'green',
+    backgroundColor: '#004d00',
     justifyContent: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
-    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: '#fff',
+    padding: 30,
+    borderRadius: 20,
+    width: '90%',
+    alignItems: 'center',
   },
   logo: {
-    width: 250,
-    height: 150,
-    marginBottom: 40,
+    width: 150,
+    height: 50,
+    resizeMode: 'contain',
+    marginBottom: 20,
   },
   title: {
-    fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 10,
-    textAlign: 'center',
+    fontSize: 22,
+    marginBottom: 5,
   },
   subtitle: {
-    fontSize: 16,
-    color: 'white',
-    textAlign: 'center',
-    marginBottom: 30,
-    paddingHorizontal: 10,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
   },
   input: {
     width: '100%',
-    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ccc',
     borderRadius: 8,
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    marginBottom: 20,
-    color: '#333',
+    padding: 12,
+    marginBottom: 15,
   },
-  button: {
+  blackButton: {
+    backgroundColor: '#000',
+    borderRadius: 8,
+    padding: 12,
     width: '100%',
-    borderRadius: 8,
-    paddingVertical: 15,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
-  continueButton: {
-    backgroundColor: 'black',
+  greenButton: {
+    backgroundColor: '#2ecc71',
+    borderRadius: 8,
+    padding: 12,
+    width: '100%',
+    alignItems: 'center',
   },
   buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  termsText: {
-    color: 'white',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 20,
-    paddingHorizontal: 10,
-  },
-  linkText: {
-    color: '#E0FF4F',
-    fontWeight: 'bold',
-    textDecorationLine: 'underline',
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 
