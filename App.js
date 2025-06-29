@@ -16,6 +16,9 @@ import StartGameScreen from './screens/StartGameScreen.js';
 // Import the new DiceRollGameScreen
 import DiceRollGameScreen from './screens/DiceRollGameScreen.js';
 
+// Import the new SearchScreen and LeaderboardScreen
+import SearchScreen from './screens/SearchScreen.js';
+import LeaderboardScreen from './screens/LeaderboardScreen.js';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +31,12 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+
+        {/* SearchScreen: Player search functionality */}
+        <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
+
+        {/* LeaderboardScreen: Full leaderboard view */}
+        <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: false }} />
 
         {/* StartGameScreen: User inputs player names here */}
         <Stack.Screen name="StartGame" component={StartGameScreen} options={{ headerShown: false }} />

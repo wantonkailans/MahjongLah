@@ -136,8 +136,8 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.kakiButton} onPress={() => console.log('Find Kaki pressed')}>
-            <Text style={styles.kakiButtonText}>Find your Mahjong Kaki today!</Text>
+          <TouchableOpacity style={styles.kakiButton} onPress={() => navigation.navigate('Leaderboard')}>
+            <Text style={styles.kakiButtonText}>View Leaderboard</Text>
           </TouchableOpacity>
         </View>
 
@@ -162,7 +162,7 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Search')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>🔍</Text>
           </View>
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     right: 0,
     elevation: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -5 },
+    shadowOffset: { width: 0, head: -5 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
   },
