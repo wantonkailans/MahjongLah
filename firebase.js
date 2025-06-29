@@ -1,19 +1,29 @@
+// firebase.js
 import { initializeApp } from 'firebase/app';
-import { getAuth } from "firebase/auth";
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+// Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDabtH7TdXn5VZEw78YhWG3a9jwzpI5-Q8",
-  authDomain: "mahjonglah-3578b.firebaseapp.com",
-  projectId: "mahjonglah-3578b",
-  storageBucket: "mahjonglah-3578b.appspot.com",
-  messagingSenderId: "1088969242730",
-  appId: "1:1088969242730:web:55063706d641b8ed27b213",
-  measurementId: "G-333ECQVTLM"
+  apiKey: "AIzaSyDFQC086kCeV2H0o5wZE0JuaM8-uT1qFgs",
+  authDomain: "mahjonglahlahlah.firebaseapp.com",
+  projectId: "mahjonglahlahlah",
+  storageBucket: "mahjonglahlahlah.firebasestorage.app",
+  messagingSenderId: "643699311612",
+  appId: "1:643699311612:web:f37767d78fea4502752879",
+  measurementId: "G-WTM2HEDZWT"
 };
 
 // Initialize Firebase
-export const FIREBASE_APP = initializeApp(firebaseConfig);
-export const FIREBASE_AUTH = getAuth(FIREBASE_APP);
-export const FIRESTORE_DB = getFirestore(FIREBASE_APP);
+const app = initializeApp(firebaseConfig);
 
+// Initialize Firebase Authentication and get a reference to the service
+export const auth = getAuth(app);
+
+// Initialize Cloud Firestore and get a reference to the service
+export const db = getFirestore(app);
+
+// For compatibility with existing code
+export const FIREBASE_AUTH = auth;
+
+export default app;

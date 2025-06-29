@@ -15,7 +15,39 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.MahjongLah"
+      "bundleIdentifier": "com.anonymous.MahjongLah",
+      "cocoaPods": {  
+        "extraPods": [
+          {
+            "podName": "FirebaseAuth",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseCore",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseCoreInternal",
+            "modularHeaders": true
+          },
+          {
+            "podName": "GoogleUtilities",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseAppCheckInterop",
+            "modularHeaders": true
+          },
+          {
+            "podName": "RecaptchaInterop",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseAuthInterop",
+            "modularHeaders": true
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

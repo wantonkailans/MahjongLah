@@ -1,322 +1,501 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  Platform,
+  Image,
+  StatusBar,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Make sure you have this installed
 
-// Firebase imports
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
+const StartGameScreen = () => {
+  const navigation = useNavigation();
+  
+  const [player1Username, setPlayer1Username] = useState('');
+  const [player2Username, setPlayer2Username] = useState('');
+  const [player3Username, setPlayer3Username] = useState('');
+  const [player4Username, setPlayer4Username] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  // New states for validation feedback
+  const [validationResults, setValidationResults] = useState({});
+  const [showValidationResults, setShowValidationResults] = useState(false);
+  const [missingUsernames, setMissingUsernames] = useState([]);
+  const [foundUsernames, setFoundUsernames] = useState([]);
 
-// --- IMPORTANT: Replace with your actual Firebase project credentials ---
-// You can find this information in your Firebase project settings (Project settings -> General -> Your apps -> Firebase SDK snippet -> Config)
-const __app_id = 'your-app-id'; // e.g., 'mahjong-lah-12345'
-const __firebase_config = JSON.stringify({
-  apiKey: "AIzaSyDabtH7TdXn5VZEw78YhWG3a9jwzpI5-Q8",
-  authDomain: "mahjonglah-3578b.firebaseapp.com",
-  projectId: "mahjonglah-3578b",
-  storageBucket: "mahjonglah-3578b.appspot.com",
-  messagingSenderId: "1088969242730",
-  appId: "1:1088969242730:web:55063706d641b8ed27b213",
-  measurementId: "G-333ECQVTLM"
-});
-const __initial_auth_token = null; // Leave null unless you have a specific custom token for initial auth
-// --- End Firebase Config ---
+  const handleStartGame = async () => {
+    console.log('=== START GAME VALIDATION ===');
+    
+    // Reset previous validation results
+    setValidationResults({});
+    setShowValidationResults(false);
+    setMissingUsernames([]);
+    setFoundUsernames([]);
 
-export default function StartGameScreen() {
-    const navigation = useNavigation();
-
-    // Firebase state management
-    const [app, setApp] = useState(null);
-    const [db, setDb] = useState(null);
-    const [auth, setAuth] = useState(null);
-    const [userId, setUserId] = useState('anonymous');
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    const [firebaseError, setFirebaseError] = useState(null);
-
-    // Firestore collection path for public game sessions
-    const publicGameCollectionPath = `/artifacts/${__app_id}/public/data/gameSessions`;
-
-    // Firebase Initialization Effect
-    useEffect(() => {
-        const firebaseConfig = JSON.parse(__firebase_config);
-
-        // Check if Firebase config is actually provided and not just placeholders
-        if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey !== "YOUR_API_KEY" && firebaseConfig.projectId !== "YOUR_PROJECT_ID") {
-            try {
-                const firebaseApp = initializeApp(firebaseConfig);
-                const firestoreDb = getFirestore(firebaseApp);
-                const firebaseAuth = getAuth(firebaseApp);
-                setApp(firebaseApp);
-                setDb(firestoreDb);
-                setAuth(firebaseAuth);
-
-                const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
-                    if (user) {
-                        setUserId(user.uid);
-                    } else {
-                        try {
-                            if (__initial_auth_token) {
-                                await signInWithCustomToken(firebaseAuth, __initial_auth_token);
-                            } else {
-                                await signInAnonymously(firebaseAuth);
-                            }
-                            // Ensure userId is set, fallback to random if auth.currentUser is null (e.g., if signInAnonymously fails silently)
-                            setUserId(firebaseAuth.currentUser?.uid || `anon-${Math.random().toString(36).substring(2, 15)}`);
-                        } catch (error) {
-                            console.error("StartGameScreen: Firebase authentication error during sign-in:", error);
-                            setFirebaseError("Failed to authenticate. Check network and Firebase config.");
-                            setUserId(`anon-${Math.random().toString(36).substring(2, 15)}`); // Fallback random ID
-                        }
-                    }
-                    setIsAuthReady(true); // Firebase auth process is considered "ready" after this initial check
-                });
-
-                return () => unsubscribe(); // Clean up auth listener on unmount
-            } catch (e) {
-                console.error("StartGameScreen: Firebase initialization error:", e);
-                setFirebaseError("Failed to initialize Firebase. Check your project configuration.");
-                setIsAuthReady(true); // Still set ready to allow UI to render even with error
-            }
-        } else {
-            console.warn("StartGameScreen: Firebase config is missing or has placeholders. Running without cloud persistence.");
-            setFirebaseError("Firebase config is missing/incorrect. Game data will NOT be saved to the cloud.");
-            setIsAuthReady(true);
-            setUserId(`anon-${Math.random().toString(36).substring(2, 15)}`); // Generate random ID if no Firebase
-        }
-    }, []);
-
-    // State for individual username inputs
-    const [username1, setUsername1] = useState('');
-    const [username2, setUsername2] = useState('');
-    const [username3, setUsername3] = useState('');
-    const [username4, setUsername4] = useState('');
-
-    const handleStartGamePress = async () => {
-        // 1. Validate usernames
-        if (!username1.trim() || !username2.trim() || !username3.trim() || !username4.trim()) {
-            Alert.alert(
-                'Missing Input',
-                'Please enter a username for all players to start the game.'
-            );
-            return; // Stop execution if validation fails
-        }
-
-        // 2. Prepare player data in the required format for the DiceRollGameScreen
-        const initialPlayers = [
-            { id: `player1-${Math.random().toString(36).substring(2, 15)}`, name: username1.trim(), roll: null, hasRolled: false },
-            { id: `player2-${Math.random().toString(36).substring(2, 15)}`, name: username2.trim(), roll: null, hasRolled: false },
-            { id: `player3-${Math.random().toString(36).substring(2, 15)}`, name: username3.trim(), roll: null, hasRolled: false },
-            { id: `player4-${Math.random().toString(36).substring(2, 15)}`, name: username4.trim(), roll: null, hasRolled: false },
-        ];
-
-        // 3. Store the original player order locally using AsyncStorage
-        try {
-            await AsyncStorage.setItem('originalPlayerOrder', JSON.stringify(initialPlayers.map(p => ({ id: p.id, name: p.name }))));
-        } catch (e) {
-            console.error("StartGameScreen: Error saving original player order to AsyncStorage:", e);
-        }
-
-        // 4. Generate a unique game session ID
-        const newGameSessionId = `game-${Date.now()}`;
-
-        // 5. Attempt to save the initial game state to Firebase Firestore
-        // This will only run if Firebase is successfully initialized. Errors will be alerted but navigation will proceed.
-        if (isAuthReady && db) {
-            const gameDocRef = doc(db, publicGameCollectionPath, newGameSessionId);
-            try {
-                await setDoc(gameDocRef, {
-                    gameId: newGameSessionId,
-                    status: 'dice_rolling',
-                    players: initialPlayers.map(p => ({ // Only store necessary data to Firestore
-                        id: p.id,
-                        name: p.name,
-                        roll: p.roll,
-                        hasRolled: p.hasRolled
-                    })),
-                    createdAt: new Date().toISOString(),
-                    createdBy: userId
-                });
-            } catch (error) {
-                console.error("StartGameScreen: Error initializing game session in Firestore:", error);
-                Alert.alert(
-                    "Firestore Error",
-                    "Failed to save game data to the cloud. Please check your network connection and Firebase rules. Game will proceed locally.",
-                    [{ text: 'OK' }]
-                );
-            }
-        } else {
-            // This alert shows if Firebase was never ready (e.g., config error)
-            Alert.alert(
-                "Firebase Not Ready",
-                "Game data will not be saved to the cloud. Please ensure Firebase config is correct. Proceeding for local testing.",
-                [{ text: 'OK' }]
-            );
-        }
-
-        // 6. Navigate to the DiceRollGame screen, passing necessary data
-        // This navigation will always occur if username validation passes,
-        // allowing the game to start even if cloud persistence has issues.
-        navigation.navigate('DiceRollGame', { initialPlayers: initialPlayers, gameSessionId: newGameSessionId });
-    };
-
-    // Show loading indicator while Firebase is initializing
-    if (!isAuthReady) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#FFD700" />
-                <Text style={styles.loadingText}>Initializing Game Services...</Text>
-                {firebaseError && <Text style={styles.errorText}>{firebaseError}</Text>}
-            </View>
-        );
+    const enteredUsernames = [player1Username, player2Username, player3Username, player4Username].filter(Boolean);
+    console.log('Entered usernames:', enteredUsernames);
+    
+    if (enteredUsernames.length !== 4) {
+      Alert.alert('Error', 'Please enter usernames for all 4 players.');
+      return;
     }
 
-    return (
-        <ScrollView contentContainerStyle={styles.container}>
-            {/* Header section */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.goBack()}>
-                    <Text style={{ fontSize: 28, color: 'white' }}>☰</Text>
-                </TouchableOpacity>
-                <Image
-                    source={require('../assets/images/mahjonglah!.png')} // Adjust path if logo is in a different folder
-                    style={styles.headerLogo}
-                    resizeMode="contain"
-                />
-                <Image
-                    source={require('../assets/images/boy1.png')} // Assuming you have a profile icon
-                    style={styles.profileIcon}
-                    resizeMode="contain"
-                />
+    const uniqueEnteredUsernames = new Set(enteredUsernames.map(name => name.toLowerCase()));
+    if (uniqueEnteredUsernames.size !== 4) {
+      Alert.alert('Error', 'Player usernames must be unique for this game session.');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      console.log('Starting username validation...');
+      
+      // Import Firebase here to catch any import errors
+      const { collection, query, where, getDocs } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      
+      console.log('Firebase imports successful, db:', db);
+      
+      const usersRef = collection(db, 'users');
+      const foundPlayers = [];
+      const missingUsernamesList = [];
+      const foundUsernamesList = [];
+      const results = {};
+
+      // Check each username
+      for (const username of enteredUsernames) {
+        console.log(`Checking username: ${username}`);
+        
+        try {
+          const q = query(usersRef, where('username', '==', username.toLowerCase()));
+          const querySnapshot = await getDocs(q);
+
+          if (querySnapshot.empty) {
+            console.log(`❌ Username "${username}" NOT found`);
+            missingUsernamesList.push(username);
+            results[username] = { found: false, status: 'not_found' };
+          } else {
+            console.log(`✅ Username "${username}" found`);
+            foundUsernamesList.push(username);
+            results[username] = { found: true, status: 'found' };
+            
+            querySnapshot.forEach(doc => {
+              foundPlayers.push({ 
+                uid: doc.id, 
+                username: doc.data().username,
+                displayName: doc.data().displayName || doc.data().username 
+              });
+            });
+          }
+        } catch (userError) {
+          console.error(`Error checking username ${username}:`, userError);
+          missingUsernamesList.push(username);
+          results[username] = { found: false, status: 'error' };
+        }
+      }
+
+      // Update state with validation results
+      setValidationResults(results);
+      setMissingUsernames(missingUsernamesList);
+      setFoundUsernames(foundUsernamesList);
+      setShowValidationResults(true);
+
+      console.log('Found players:', foundPlayers);
+      console.log('Missing usernames:', missingUsernamesList);
+
+      // If some usernames don't exist, show the results but don't navigate
+      if (missingUsernamesList.length > 0) {
+        console.log('Some usernames not found - showing validation results');
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ All usernames validated. Navigating to DiceRollGame...');
+      
+      // All usernames exist, navigate to dice roll screen
+      navigation.navigate('DiceRollGame', { players: foundPlayers });
+
+    } catch (error) {
+      console.error("❌ Error validating usernames:", error);
+      Alert.alert('Error', `Failed to validate usernames. Please try again.\n\nError: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Simple test to make sure the component renders
+  console.log('StartGameScreen rendering...');
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.headerIcon}>←</Text>
+        </TouchableOpacity>
+        <Image
+          source={require('../assets/images/mahjonglah!.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+        <TouchableOpacity style={styles.headerButton}>
+          <Image
+            source={require('../assets/images/boy1.png')}
+            style={styles.profileImage}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
+        <View style={styles.gameSetupCard}>
+          <Text style={styles.gameSetupTitle}>Enter Player Usernames</Text>
+          <Text style={styles.gameSetupSubtitle}>Please enter the usernames of all 4 players</Text>
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Player 1 Username"
+            placeholderTextColor="#999"
+            value={player1Username}
+            onChangeText={setPlayer1Username}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Player 2 Username"
+            placeholderTextColor="#999"
+            value={player2Username}
+            onChangeText={setPlayer2Username}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Player 3 Username"
+            placeholderTextColor="#999"
+            value={player3Username}
+            onChangeText={setPlayer3Username}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Player 4 Username"
+            placeholderTextColor="#999"
+            value={player4Username}
+            onChangeText={setPlayer4Username}
+            autoCapitalize="none"
+          />
+          
+          <TouchableOpacity 
+            style={[styles.startButton, loading && styles.buttonDisabled]} 
+            onPress={handleStartGame}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.startButtonText}>Let's Begin!</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Validation Results Section */}
+          {showValidationResults && (
+            <View style={styles.validationContainer}>
+              <Text style={styles.validationTitle}>Validation Results</Text>
+              
+              {foundUsernames.length > 0 && (
+                <View style={styles.foundUsersSection}>
+                  <Text style={styles.foundUsersTitle}>✅ Found Users:</Text>
+                  {foundUsernames.map((username, index) => (
+                    <View key={index} style={styles.foundUserItem}>
+                      <Text style={styles.foundUserText}>{username}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {missingUsernames.length > 0 && (
+                <View style={styles.missingUsersSection}>
+                  <Text style={styles.missingUsersTitle}>❌ Users Not Found:</Text>
+                  {missingUsernames.map((username, index) => (
+                    <View key={index} style={styles.missingUserItem}>
+                      <Text style={styles.missingUserText}>{username}</Text>
+                    </View>
+                  ))}
+                  
+                  <View style={styles.instructionBox}>
+                    <Text style={styles.instructionTitle}>What to do next:</Text>
+                    <Text style={styles.instructionText}>
+                      The users listed above need to create accounts first before they can play.
+                    </Text>
+                    <Text style={styles.instructionText}>
+                      Please ask them to sign up using the app, then try starting the game again.
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity 
+                    style={styles.tryAgainButton}
+                    onPress={() => {
+                      setShowValidationResults(false);
+                      setValidationResults({});
+                      setMissingUsernames([]);
+                      setFoundUsernames([]);
+                    }}
+                  >
+                    <Text style={styles.tryAgainButtonText}>Try Again</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
+          )}
+        </View>
+      </ScrollView>
 
-            {/* Input fields for usernames */}
-            <View style={styles.inputContainer}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Username for Player 1"
-                    placeholderTextColor="#E0F2E0" // Light green for dark theme
-                    value={username1}
-                    onChangeText={setUsername1}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Username for Player 2"
-                    placeholderTextColor="#E0F2E0" // Light green for dark theme
-                    value={username2}
-                    onChangeText={setUsername2}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Username for Player 3"
-                    placeholderTextColor="#E0F2E0" // Light green for dark theme
-                    value={username3}
-                    onChangeText={setUsername3}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Username for Player 4"
-                    placeholderTextColor="#E0F2E0" // Light green for dark theme
-                    value={username4}
-                    onChangeText={setUsername4}
-                />
-            </View>
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNavBar}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🏠</Text>
+          </View>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🔍</Text>
+          </View>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Profile pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>👤</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
-            {/* Start Game Button */}
-            <TouchableOpacity style={styles.startButton} onPress={handleStartGamePress}>
-                <Text style={styles.startButtonText}>Start Game!</Text>
-            </TouchableOpacity>
-            {/* Display Firebase errors/warnings below the button if any */}
-            {firebaseError && <Text style={styles.errorText}>{firebaseError}</Text>}
-        </ScrollView>
-    );
-}
-
-// --- StyleSheet for React Native Components (Dark Green Theme) ---
 const styles = StyleSheet.create({
-    container: {
-        flexGrow: 1,
-        backgroundColor: '#0A360A', // Dark Green
-        alignItems: 'center',
-        paddingBottom: 20,
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#0A360A', // Dark Green
-    },
-    loadingText: {
-        color: '#E0F2E0', // Light Green
-        marginTop: 10,
-        fontSize: 16,
-    },
-    errorText: {
-        color: '#F8D7DA', // Light Red for errors
-        marginTop: 10,
-        fontSize: 14,
-        textAlign: 'center',
-        marginHorizontal: 20,
-    },
-    header: {
-        width: '100%',
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: 50, // Adjust for status bar
-        paddingBottom: 20,
-        backgroundColor: '#0A360A', // Dark Green
-    },
-    headerIcon: {
-        // Styles for your menu/back button icon
-    },
-    headerLogo: {
-        width: 100,
-        height: 100,
-    },
-    profileIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#E0F2E0', // Light Green for profile icon background
-    },
-    inputContainer: {
-        width: '85%',
-        marginTop: 40,
-        marginBottom: 30,
-    },
-    input: {
-        backgroundColor: '#1A4314', // Darker Green background for inputs
-        borderRadius: 10,
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        fontSize: 16,
-        color: '#E0F2E0', // Light Green text for inputs
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3,
-    },
-    startButton: {
-        backgroundColor: '#FFD700', // Gold/Yellow color
-        borderRadius: 10,
-        paddingVertical: 15,
-        paddingHorizontal: 40,
-        marginTop: 20,
-        width: '85%',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25,
-        shadowRadius: 5,
-        elevation: 5,
-    },
-    startButtonText: {
-        color: '#1A4314', // Dark green text for the button
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
+  container: {
+    flex: 1,
+    backgroundColor: '#004d00',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50,
+    paddingBottom: 10,
+  },
+  headerButton: {
+    padding: 5,
+  },
+  headerIcon: {
+    fontSize: 24,
+    color: '#fff',
+  },
+  headerLogo: {
+    width: 120,
+    height: 40,
+    resizeMode: 'contain',
+  },
+  profileImage: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+  },
+  scrollViewContent: {
+    alignItems: 'center',
+    paddingBottom: 100,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  gameSetupCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    width: '100%',
+    padding: 25,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  gameSetupTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  gameSetupSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 25,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    backgroundColor: '#f8f8f8',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 15,
+    fontSize: 16,
+    color: '#000',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  startButton: {
+    width: '100%',
+    backgroundColor: '#F8B100',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  startButtonText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  bottomNavBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 15,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  navIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTextIcon: {
+    fontSize: 24,
+    color: '#666',
+  },
+  // Validation Results Styles
+  validationContainer: {
+    width: '100%',
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  validationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#004d00',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  foundUsersSection: {
+    marginBottom: 15,
+  },
+  foundUsersTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#28a745',
+    marginBottom: 10,
+  },
+  foundUserItem: {
+    backgroundColor: '#d4edda',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 5,
+    borderLeftWidth: 4,
+    borderLeftColor: '#28a745',
+  },
+  foundUserText: {
+    color: '#155724',
+    fontWeight: '500',
+  },
+  missingUsersSection: {
+    marginTop: 10,
+  },
+  missingUsersTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#dc3545',
+    marginBottom: 10,
+  },
+  missingUserItem: {
+    backgroundColor: '#f8d7da',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 5,
+    borderLeftWidth: 4,
+    borderLeftColor: '#dc3545',
+  },
+  missingUserText: {
+    color: '#721c24',
+    fontWeight: '500',
+  },
+  instructionBox: {
+    backgroundColor: '#fff3cd',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F8B100',
+  },
+  instructionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 8,
+  },
+  instructionText: {
+    fontSize: 14,
+    color: '#856404',
+    lineHeight: 20,
+    marginBottom: 5,
+  },
+  tryAgainButton: {
+    backgroundColor: '#004d00',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  tryAgainButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
+
+export default StartGameScreen;
