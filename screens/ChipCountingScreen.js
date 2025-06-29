@@ -12,8 +12,9 @@ import {
     SafeAreaView,
     Image,
     KeyboardAvoidingView,
-    TouchableWithoutFeedback, // Still imported for specific use
-    Keyboard
+    TouchableWithoutFeedback,
+    Keyboard,
+    Modal
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
@@ -24,16 +25,24 @@ export default function ChipCountingScreen({ route }) {
     const [players, setPlayers] = useState(
         initialPlayers.map(p => ({
             ...p,
-            // Initialize everyone with a starting chip count (e.g., 1000)
-            // or 0 if you start with no chips and only gain/lose from winning
-            chips: 1000 // Starting chips for demonstration (change as needed)
+            chips: 1000 // Starting chips
         }))
     );
 
     const [losingTileShooter, setLosingTileShooter] = useState('');
     const [winner, setWinner] = useState('');
     const [taiCount, setTaiCount] = useState('');
-    const [isSelfDraw, setIsSelfDraw] = useState(false); // New state for '自摸'
+    const [isSelfDraw, setIsSelfDraw] = useState(false);
+    
+    // New state for feng (wind) rotation
+    const [currentFeng, setCurrentFeng] = useState('东'); // Start with East
+    const [roundCount, setRoundCount] = useState(0);
+    
+    // New state for final results modal
+    const [showFinalResults, setShowFinalResults] = useState(false);
+
+    // Feng rotation order
+    const fengOrder = ['东', '南', '西', '北'];
 
     useEffect(() => {
         if (banker && distributor) {
@@ -41,20 +50,36 @@ export default function ChipCountingScreen({ route }) {
         }
     }, [banker, distributor]);
 
-    // Handle the "自摸" (Self-draw) button
+    // Update feng based on round count
+    useEffect(() => {
+        const fengIndex = Math.floor(roundCount / 4) % 4;
+        setCurrentFeng(fengOrder[fengIndex]);
+    }, [roundCount]);
+
+    // Handle the "自摸" (Self-draw) button - now toggleable
     const handleSelfDraw = () => {
-        setIsSelfDraw(true); // Set self-draw mode
-        setLosingTileShooter(''); // Clear shooter input
-        Keyboard.dismiss(); // Dismiss keyboard
-        Alert.alert(
-            "自摸 Mode Active",
-            "Self-draw means no 'shooter'. The other 3 players will pay the winner."
-        );
+        if (isSelfDraw) {
+            // If already selected, deselect it
+            setIsSelfDraw(false);
+            Alert.alert(
+                "自摸 Deselected",
+                "You can now enter who shot the losing tile."
+            );
+        } else {
+            // Select self-draw mode
+            setIsSelfDraw(true);
+            setLosingTileShooter(''); // Clear shooter input
+            Keyboard.dismiss();
+            Alert.alert(
+                "自摸 Mode Active",
+                "Self-draw means no 'shooter'. The other 3 players will pay the winner."
+            );
+        }
     };
 
     // Handle applying tai/points (台)
     const handleTaiApply = () => {
-        Keyboard.dismiss(); // Dismiss keyboard
+        Keyboard.dismiss();
 
         if (!winner || isNaN(parseInt(taiCount)) || taiCount === '' || parseInt(taiCount) < 0) {
             Alert.alert("Input Required", "Please enter a winner's username and a valid 'Tai' count (>= 0).");
@@ -69,26 +94,20 @@ export default function ChipCountingScreen({ route }) {
             return;
         }
 
-        // --- Simplified Mahjong Scoring Logic (Hong Kong/Cantonese style example) ---
-        // Base payment per Tai - common to use powers of 2 for points
-        // Example: 1 Tai = $X, 2 Tai = $2X, 3 Tai = $4X, etc.
-        const basePointValue = 5; // Base amount for 1 Tai (e.g., $5)
-        let totalPointsToPay = basePointValue * Math.pow(2, tai - 1); // Exponential for tai >= 1. tai 0 would be special.
+        const basePointValue = 5;
+        let totalPointsToPay = basePointValue * Math.pow(2, tai - 1);
 
-        if (tai === 0) { // Handle 0 Tai case, usually a minimum win amount
-            // For simplicity, let's say 0 Tai still gets basePointValue
+        if (tai === 0) {
             totalPointsToPay = basePointValue;
-            Alert.alert("0 Tai Win", `Assuming a minimum win of ${totalPointsToPay} chips for 0 Tai. Adjust logic for specific 0-Tai rules.`);
+            Alert.alert("0 Tai Win", `Assuming a minimum win of ${totalPointsToPay} chips for 0 Tai.`);
         }
 
-
-        let updatedPlayers = players.map(p => ({ ...p })); // Create a mutable copy
+        let updatedPlayers = players.map(p => ({ ...p }));
 
         if (isSelfDraw) {
-            // Self-draw (自摸): All other players pay equally
             const playersToPay = updatedPlayers.filter(p => p.id !== winningPlayer.id);
             if (playersToPay.length > 0) {
-                const amountPerPlayer = totalPointsToPay; // Each player pays the full amount to winner
+                const amountPerPlayer = totalPointsToPay;
                 playersToPay.forEach(p => {
                     const playerIndex = updatedPlayers.findIndex(up => up.id === p.id);
                     if (playerIndex !== -1) {
@@ -96,12 +115,11 @@ export default function ChipCountingScreen({ route }) {
                     }
                 });
                 const winnerIndex = updatedPlayers.findIndex(p => p.id === winningPlayer.id);
-                updatedPlayers[winnerIndex].chips += (amountPerPlayer * playersToPay.length); // Winner gets from all others
+                updatedPlayers[winnerIndex].chips += (amountPerPlayer * playersToPay.length);
             }
             Alert.alert("自摸 Win!", `${winningPlayer.name} self-drew and gained ${totalPointsToPay * playersToPay.length} chips (${tai} Tai).`);
 
         } else {
-            // Not self-draw: Check for shooter
             if (!losingTileShooter) {
                 Alert.alert("Input Required", "Please enter who shot the losing tile (放銃), or select '自摸' if it was a self-draw.");
                 return;
@@ -115,11 +133,10 @@ export default function ChipCountingScreen({ route }) {
             }
 
             if (shooterPlayer.id === winningPlayer.id) {
-                 Alert.alert("Invalid Input", "The winner cannot be the shooter of their own winning tile (unless it's self-draw). Please check your input.");
-                 return;
+                Alert.alert("Invalid Input", "The winner cannot be the shooter of their own winning tile (unless it's self-draw). Please check your input.");
+                return;
             }
 
-            // Shooter (放銃): Shooter pays the entire amount to the winner
             const winnerIndex = updatedPlayers.findIndex(p => p.id === winningPlayer.id);
             const shooterIndex = updatedPlayers.findIndex(p => p.id === shooterPlayer.id);
 
@@ -132,43 +149,23 @@ export default function ChipCountingScreen({ route }) {
 
         setPlayers(updatedPlayers);
 
+        // Increment round count to update feng
+        setRoundCount(prev => prev + 1);
+
         // Reset inputs after applying
         setLosingTileShooter('');
         setWinner('');
         setTaiCount('');
-        setIsSelfDraw(false); // Reset self-draw mode
-    };
-
-    const handleProceedToNextRound = () => {
-        Alert.alert(
-            "Next Round",
-            "Proceeding to the next round. Chip counts will carry over. Ready for the next hand?",
-            [
-                { text: "Cancel", style: "cancel" },
-                { text: "OK", onPress: () => {
-                    // Reset input fields
-                    setLosingTileShooter('');
-                    setWinner('');
-                    setTaiCount('');
-                    setIsSelfDraw(false);
-                    // No need to reset player chips here, they carry over
-                }}
-            ]
-        );
+        setIsSelfDraw(false);
     };
 
     const handleEndGame = () => {
-        Alert.alert(
-            "End Game",
-            "Are you sure you want to end the game? Final scores will be tallied.",
-            [
-                { text: "Cancel", style: "cancel" },
-                { text: "Yes, End Game", onPress: () => {
-                    // You might navigate to a final results screen, or back to home
-                    navigation.navigate('StartGame'); // Example: go back to the start
-                }}
-            ]
-        );
+        setShowFinalResults(true);
+    };
+
+    const handleExitToHome = () => {
+        setShowFinalResults(false);
+        navigation.navigate('Home');
     };
 
     return (
@@ -178,7 +175,11 @@ export default function ChipCountingScreen({ route }) {
                 <TouchableOpacity style={styles.navButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.navButtonText}>← Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>End game</Text>
+                <Image
+                    source={require('../assets/images/mahjonglah!.png')}
+                    style={styles.headerLogo}
+                    resizeMode="contain"
+                />
                 <View style={styles.navButtonPlaceholder} />
             </View>
 
@@ -187,12 +188,14 @@ export default function ChipCountingScreen({ route }) {
                 style={{ flex: 1, width: '100%' }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                {/* The TouchableWithoutFeedback should only wrap elements that are *not* TextInputs directly. */}
-                {/* We wrap the player cards and title here, allowing TextInputs outside of its direct touch capture. */}
                 <View style={styles.contentContainer}>
+                    {/* Feng Indicator in top-right corner */}
+                    <View style={styles.fengIndicator}>
+                        <Text style={styles.fengText}>{currentFeng}</Text>
+                    </View>
+
                     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                            {/* A dummy View is often necessary inside TouchableWithoutFeedback when wrapping multiple components */}
                             <View>
                                 <Text style={styles.title}>Current Chip Count:</Text>
 
@@ -211,7 +214,6 @@ export default function ChipCountingScreen({ route }) {
                             </View>
                         </TouchableWithoutFeedback>
 
-                        {/* Input fields and buttons are placed OUTSIDE the TouchableWithoutFeedback's direct children */}
                         <Text style={styles.sectionTitle}>Enter who shot the losing tile:</Text>
                         <View style={styles.inputGroup}>
                             <TextInput
@@ -221,13 +223,19 @@ export default function ChipCountingScreen({ route }) {
                                 value={losingTileShooter}
                                 onChangeText={setLosingTileShooter}
                                 autoCapitalize="none"
-                                editable={!isSelfDraw} // Disable if self-draw is active
+                                editable={!isSelfDraw}
                             />
                             <TouchableOpacity
-                                style={[styles.miniButton, styles.selfDrawButton]} // Apply custom style
+                                style={[
+                                    styles.miniButton, 
+                                    isSelfDraw ? styles.selfDrawButtonActive : styles.selfDrawButton
+                                ]}
                                 onPress={handleSelfDraw}
                             >
-                                <Text style={styles.miniButtonText}>自摸</Text>
+                                <Text style={[
+                                    styles.miniButtonText,
+                                    isSelfDraw && styles.activeButtonText
+                                ]}>自摸</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -253,12 +261,6 @@ export default function ChipCountingScreen({ route }) {
                                 <Text style={styles.miniButtonText}>Apply</Text>
                             </TouchableOpacity>
                         </View>
-
-                        <TouchableOpacity style={styles.proceedButton} onPress={handleProceedToNextRound}>
-                            <Text style={styles.proceedButtonText}>Proceed to next round</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.orText}>OR</Text>
 
                         <TouchableOpacity style={styles.endGameButton} onPress={handleEndGame}>
                             <Text style={styles.endGameButtonText}>End Game</Text>
@@ -288,6 +290,61 @@ export default function ChipCountingScreen({ route }) {
                     </View>
                 </TouchableOpacity>
             </View>
+
+            {/* Final Results Modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={showFinalResults}
+                onRequestClose={() => setShowFinalResults(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>🎉 Game Results</Text>
+                        
+                        <Text style={styles.roundInfo}>
+                            Game ended after {roundCount} round{roundCount !== 1 ? 's' : ''}
+                        </Text>
+                        <Text style={styles.fengInfo}>
+                            Final wind: {currentFeng}
+                        </Text>
+
+                        <View style={styles.finalScoresContainer}>
+                            <Text style={styles.finalScoresTitle}>Final Chip Counts:</Text>
+                            
+                            {players
+                                .sort((a, b) => b.chips - a.chips) // Sort by chips (highest first)
+                                .map((player, index) => (
+                                    <View key={player.id} style={styles.finalScoreRow}>
+                                        <View style={styles.rankContainer}>
+                                            <Text style={styles.rankText}>#{index + 1}</Text>
+                                        </View>
+                                        <Image
+                                            source={require('../assets/images/boy1.png')}
+                                            style={styles.finalScoreAvatar}
+                                        />
+                                        <Text style={styles.finalScoreName}>{player.name}</Text>
+                                        <Text style={[
+                                            styles.finalScoreChips,
+                                            player.chips > 1000 ? styles.positiveChips : 
+                                            player.chips < 1000 ? styles.negativeChips : styles.neutralChips
+                                        ]}>
+                                            {player.chips} chips
+                                        </Text>
+                                    </View>
+                                ))
+                            }
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.exitButton}
+                            onPress={handleExitToHome}
+                        >
+                            <Text style={styles.exitButtonText}>Exit to Home</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -295,7 +352,7 @@ export default function ChipCountingScreen({ route }) {
 const styles = StyleSheet.create({
     fullScreenContainer: {
         flex: 1,
-        backgroundColor: '#004d00', // Dark green background
+        backgroundColor: '#004d00',
     },
     header: {
         flexDirection: 'row',
@@ -325,6 +382,11 @@ const styles = StyleSheet.create({
         marginLeft: -10,
         marginRight: -10,
     },
+    headerLogo: {
+        width: 120,
+        height: 40,
+        resizeMode: 'contain',
+    },
     navButtonPlaceholder: {
         width: 44,
         height: 44,
@@ -337,11 +399,36 @@ const styles = StyleSheet.create({
         marginHorizontal: 20,
         flex: 1,
         overflow: 'hidden',
+        position: 'relative', // For feng indicator positioning
+    },
+    // Feng indicator styles
+    fengIndicator: {
+        position: 'absolute',
+        top: 15,
+        right: 20,
+        backgroundColor: '#004d00',
+        borderRadius: 25,
+        width: 50,
+        height: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+    },
+    fengText: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
     },
     scrollContent: {
         padding: 20,
         alignItems: 'center',
         paddingBottom: 40,
+        paddingTop: 80, // Extra padding to avoid overlap with feng indicator
     },
     title: {
         color: '#004d00',
@@ -384,7 +471,7 @@ const styles = StyleSheet.create({
     playerChipCount: {
         fontSize: 22,
         fontWeight: 'bold',
-        color: '#F8B100', // Gold color for chips
+        color: '#F8B100',
     },
     sectionTitle: {
         fontSize: 16,
@@ -415,7 +502,7 @@ const styles = StyleSheet.create({
         marginRight: 10,
     },
     disabledInput: {
-        backgroundColor: '#e0e0e0', // Grey out when disabled
+        backgroundColor: '#e0e0e0',
         color: '#666',
     },
     miniInput: {
@@ -431,43 +518,27 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     miniButton: {
-        backgroundColor: '#F8B100', // Default gold background
+        backgroundColor: '#F8B100',
         paddingVertical: 12,
         paddingHorizontal: 15,
         borderRadius: 10,
         alignItems: 'center',
     },
     miniButtonText: {
-        color: '#000', // Default black text
+        color: '#000',
         fontSize: 15,
         fontWeight: 'bold',
     },
     selfDrawButton: {
-        backgroundColor: '#6A5ACD', // A distinct color for '自摸', e.g., SlateBlue
+        backgroundColor: '#6A5ACD', // Purple when not selected
     },
-    proceedButton: {
-        backgroundColor: '#F8B100',
-        paddingVertical: 15,
-        borderRadius: 12,
-        width: '100%',
-        alignItems: 'center',
-        marginTop: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
+    selfDrawButtonActive: {
+        backgroundColor: '#32CD32', // Green when selected
+        borderWidth: 2,
+        borderColor: '#228B22',
     },
-    orText: {
-        fontSize: 14,
-        color: '#666',
-        marginVertical: 15,
-        fontWeight: 'bold',
-    },
-    proceedButtonText: {
-        color: '#000',
-        fontSize: 18,
-        fontWeight: 'bold',
+    activeButtonText: {
+        color: '#fff', // White text when active
     },
     endGameButton: {
         backgroundColor: '#dc3545',
@@ -475,7 +546,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         width: '100%',
         alignItems: 'center',
-        marginBottom: 20,
+        marginTop: 30,
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -520,5 +591,125 @@ const styles = StyleSheet.create({
     navTextIcon: {
         fontSize: 24,
         color: '#666',
+    },
+    // Modal styles for final results
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        padding: 25,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 20,
+        width: '90%',
+        maxWidth: 400,
+        alignItems: 'center',
+        maxHeight: '80%',
+    },
+    modalTitle: {
+        fontSize: 24,
+        color: '#004d00',
+        marginBottom: 15,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    roundInfo: {
+        fontSize: 16,
+        color: '#666',
+        marginBottom: 5,
+        textAlign: 'center',
+    },
+    fengInfo: {
+        fontSize: 16,
+        color: '#666',
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    finalScoresContainer: {
+        width: '100%',
+        marginBottom: 20,
+    },
+    finalScoresTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#004d00',
+        marginBottom: 15,
+        textAlign: 'center',
+    },
+    finalScoreRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f8f9fa',
+        padding: 12,
+        borderRadius: 10,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#e9ecef',
+    },
+    rankContainer: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#004d00',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    rankText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    finalScoreAvatar: {
+        width: 35,
+        height: 35,
+        borderRadius: 17.5,
+        marginRight: 10,
+        borderWidth: 2,
+        borderColor: '#004d00',
+    },
+    finalScoreName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#333',
+        flex: 1,
+    },
+    finalScoreChips: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    positiveChips: {
+        color: '#28a745', // Green for gains
+    },
+    negativeChips: {
+        color: '#dc3545', // Red for losses
+    },
+    neutralChips: {
+        color: '#6c757d', // Gray for neutral
+    },
+    exitButton: {
+        backgroundColor: '#004d00',
+        paddingVertical: 15,
+        paddingHorizontal: 30,
+        borderRadius: 12,
+        width: '100%',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+    },
+    exitButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
     },
 });
