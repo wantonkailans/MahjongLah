@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "643699311612",
+    "project_id": "mahjonglahlahlah",
+    "storage_bucket": "mahjonglahlahlah.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643699311612:android:cb5d9a847f3de273752879",
+        "android_client_info": {
+          "package_name": "com.anonymous.MahjongLah"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCyjdx_xTrMDdAkqXARl1ab31UOypiY7Og"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

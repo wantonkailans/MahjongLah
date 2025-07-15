@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.MahjongLah",
-      "cocoaPods": {  
+      "cocoaPods": {
         "extraPods": [
           {
             "podName": "FirebaseAuth",
@@ -59,6 +59,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "84f1ca6f-64ab-412f-8b68-ac9ce8ab6b1b"
+      }
+    },
+    "owner": "ztinaxz"
   }
 }

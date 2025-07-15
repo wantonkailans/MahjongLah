@@ -7,15 +7,17 @@ import { StatusBar } from 'expo-status-bar';
 // Import your existing screens
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
-import HomeScreen from './screens/HomeScreen/HomeScreen.tsx'; // Assuming this is correct path
-import ChipCountingScreen from './screens/ChipCountingScreen'; // Keep this import
+import HomeScreen from './screens/HomeScreen/HomeScreen.tsx';
+import ProfileScreen from './screens/ProfileScreen';
+import ChipCountingScreen from './screens/ChipCountingScreen'; 
 
 // Import the StartGameScreen (where you key in usernames)
 import StartGameScreen from './screens/StartGameScreen.js';
 
-// Import the new DiceRollGameScreen
 import DiceRollGameScreen from './screens/DiceRollGameScreen.js';
-
+import MahjongAnalyzerScreen from './screens/MahjongAnalyzerScreen';
+import SearchScreen from './screens/SearchScreen.js';
+import LeaderboardScreen from './screens/LeaderboardScreen.js';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,8 +28,9 @@ export default function App() {
       <StatusBar style="light" backgroundColor="#0A360A" />
       <Stack.Navigator initialRouteName="Login">
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="Signup" component={SignupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }}/>
 
         {/* StartGameScreen: User inputs player names here */}
         <Stack.Screen name="StartGame" component={StartGameScreen} options={{ headerShown: false }} />
@@ -37,6 +40,15 @@ export default function App() {
 
         {/* ChipCounting: The new screen for managing chip counts and Mahjong scoring inputs */}
         <Stack.Screen name="ChipCounting" component={ChipCountingScreen} options={{ headerShown: false }} />
+        
+        {/*Search */}
+      <Stack.Screen
+        name="MahjongAnalyzer"
+        component={MahjongAnalyzerScreen}
+        options={{ headerShown: false }}
+      />
+    
+      
       </Stack.Navigator>
     </NavigationContainer>
   );
