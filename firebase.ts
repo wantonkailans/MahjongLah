@@ -1,7 +1,6 @@
 // Import the functions you need from the SDKs
 import { initializeApp } from "firebase/app";
 import { getReactNativePersistence, initializeAuth } from "firebase/auth";
-import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 
 // Firebase configuration
@@ -18,8 +17,6 @@ const firebaseConfig = {
 // Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Analytics (optional, use only if analytics is supported)
-const analytics = getAnalytics(app);
 
 // Initialize Firebase Auth
 const auth = initializeAuth(app, {
@@ -33,4 +30,4 @@ const auth = initializeAuth(app, {
 const db = getFirestore(app);
 
 // Export initialized services
-export { app, auth, db, analytics };
+export { app, auth, db };
