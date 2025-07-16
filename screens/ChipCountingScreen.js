@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     ScrollView,
     TextInput,
-    Alert,
     Platform,
     StatusBar,
     SafeAreaView,
@@ -14,66 +13,187 @@ import {
     KeyboardAvoidingView,
     TouchableWithoutFeedback,
     Keyboard,
-    Modal
+    Modal // Re-added Modal for custom alerts
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 export default function ChipCountingScreen({ route }) {
     const navigation = useNavigation();
-    const { players: initialPlayers, banker, distributor } = route.params || { players: [], banker: null, distributor: null };
+    const {
+        players: initialPlayers,
+        banker, // The banker passed from DiceRollGameScreen
+        distributor,
+        roundNumber: initialRoundNumber,
+        gameSessionId,
+        allPlayers: initialAllPlayers, // All players in consistent order
+        lastRoundBankerWon: initialLastRoundBankerWon, // Flag from DiceRollGameScreen (now always false for first roll)
+        windCycleCount: initialWindCycleCount, // Current wind cycle from previous screen
+        playersWhoWereBankerInCurrentWind: initialPlayersWhoWereBankerInCurrentWind // Players who were banker in current wind
+    } = route.params || { 
+        players: [], 
+        banker: null, 
+        distributor: null, 
+        roundNumber: 1, 
+        gameSessionId: null, 
+        allPlayers: [], 
+        lastRoundBankerWon: false,
+        windCycleCount: 0,
+        playersWhoWereBankerInCurrentWind: new Set()
+    };
 
-    const [players, setPlayers] = useState(
-        initialPlayers.map(p => ({
-            ...p,
-            chips: 1000 // Starting chips
-        }))
-    );
+    // Players with updated chip counts for the current round
+    const [players, setPlayers] = useState(() => {
+        // Priority: use initialPlayers if available, then initialAllPlayers
+        let playersToUse = initialPlayers || initialAllPlayers;
+        
+        if (playersToUse && playersToUse.length > 0) {
+            return playersToUse.map(p => ({
+                ...p,
+                chips: p.chips !== undefined ? p.chips : 1000 // Preserve existing chips or default
+            }));
+        } else {
+            // Fallback players
+            return [
+                { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0 },
+                { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1 },
+                { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2 },
+                { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3 },
+            ];
+        }
+    });
 
     const [losingTileShooter, setLosingTileShooter] = useState('');
     const [winner, setWinner] = useState('');
     const [taiCount, setTaiCount] = useState('');
     const [isSelfDraw, setIsSelfDraw] = useState(false);
-    
-    // New state for feng (wind) rotation
-    const [currentFeng, setCurrentFeng] = useState('东'); // Start with East
-    const [roundCount, setRoundCount] = useState(0);
-    
-    // New state for final results modal
+
+    // Total game rounds played
+    const [roundCount, setRoundCount] = useState(initialRoundNumber || 1);
+
+    // New state for players who have been banker in the current wind cycle
+    const [playersWhoWereBankerInCurrentWind, setPlayersWhoWereBankerInCurrentWind] = useState(
+        initialPlayersWhoWereBankerInCurrentWind instanceof Set 
+            ? initialPlayersWhoWereBankerInCurrentWind 
+            : new Set(initialPlayersWhoWereBankerInCurrentWind || [])
+    );
+    // New state for the current wind cycle (0: 东, 1: 南, 2: 西, 3: 北)
+    const [windCycleCount, setWindCycleCount] = useState(initialWindCycleCount || 0);
+
+    // Current wind displayed (derived from windCycleCount)
+    const [currentFeng, setCurrentFeng] = useState('东');
+
+    // Current banker (updated based on game logic)
+    const [currentBanker, setCurrentBanker] = useState(banker); // Initialize with banker from previous screen
+
+    // Full list of players in their original order, used for clockwise rotation
+    const [allPlayersInOrder, setAllPlayersInOrder] = useState(() => {
+        // Priority: use initialAllPlayers if available, then initialPlayers
+        let playersToUse = initialAllPlayers || initialPlayers;
+        
+        if (playersToUse && playersToUse.length > 0) {
+            return playersToUse.map(p => ({
+                ...p,
+                chips: p.chips !== undefined ? p.chips : 1000 // Preserve existing chips
+            }));
+        } else {
+            // Fallback players
+            return [
+                { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0 },
+                { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1 },
+                { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2 },
+                { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3 },
+            ];
+        }
+    });
+
+    // Initialize current banker if exists and add to banker tracking
+    useEffect(() => {
+        if (banker && !playersWhoWereBankerInCurrentWind.has(banker.id)) {
+            setPlayersWhoWereBankerInCurrentWind(prev => new Set(prev).add(banker.id));
+        }
+    }, [banker]);
+
+    // Debug logging
+    useEffect(() => {
+        console.log('=== ChipCountingScreen Debug Info ===');
+        console.log('Current banker:', currentBanker);
+        console.log('All players in order:', allPlayersInOrder);
+        console.log('Current players with chips:', players.map(p => ({ name: p.name, chips: p.chips })));
+        console.log('Wind cycle count:', windCycleCount);
+        console.log('Current feng:', currentFeng);
+        console.log('Players who were banker in current wind:', Array.from(playersWhoWereBankerInCurrentWind));
+        console.log('Route params players:', initialPlayers?.map(p => ({ name: p.name, chips: p.chips })));
+        console.log('Route params allPlayers:', initialAllPlayers?.map(p => ({ name: p.name, chips: p.chips })));
+        console.log('=====================================');
+    }, [currentBanker, allPlayersInOrder, windCycleCount, currentFeng, playersWhoWereBankerInCurrentWind, players, initialPlayers, initialAllPlayers]);
+
+    // State for final results modal
     const [showFinalResults, setShowFinalResults] = useState(false);
 
-    // Feng rotation order
+    // State for custom alert modal
+    const [showAlertModal, setShowAlertModal] = useState(false);
+    const [alertMessage, setAlertMessage] = useState('');
+
+    // Flag to indicate if the banker won the current round (to be passed to next screen)
+    const [bankerWonThisRound, setBankerWonThisRound] = useState(false); // Reset for current round calculations
+
+    // Feng (wind) rotation order
     const fengOrder = ['东', '南', '西', '北'];
 
+    // --- useEffect: Update currentFeng when windCycleCount changes ---
     useEffect(() => {
-        if (banker && distributor) {
-            console.log(`Banker: ${banker.name}, Distributor: ${distributor.name}`);
-        }
-    }, [banker, distributor]);
+        setCurrentFeng(fengOrder[windCycleCount]);
+        console.log(`[ChipCountingScreen] Wind Cycle Count: ${windCycleCount}, Current Feng: ${fengOrder[windCycleCount]}`);
+    }, [windCycleCount]);
 
-    // Update feng based on round count
+    // --- useEffect: Check for Wind Change (After every player has been banker in current wind) ---
     useEffect(() => {
-        const fengIndex = Math.floor(roundCount / 4) % 4;
-        setCurrentFeng(fengOrder[fengIndex]);
-    }, [roundCount]);
+        // This logic should only trigger if all players are known and the set is full
+        if (allPlayersInOrder.length > 0 && playersWhoWereBankerInCurrentWind.size === allPlayersInOrder.length) {
+            console.log("All players have been banker! Changing to next wind.");
+            
+            // Show alert about wind change
+            const nextWindIndex = (windCycleCount + 1) % fengOrder.length;
+            const nextWind = fengOrder[nextWindIndex];
+            showAlert(`Wind is changing! Moving from ${currentFeng}風 to ${nextWind}風`);
+            
+            setWindCycleCount(nextWindIndex); // Move to next wind
+            setPlayersWhoWereBankerInCurrentWind(new Set()); // Reset for the new wind cycle
+        }
+    }, [playersWhoWereBankerInCurrentWind, allPlayersInOrder, fengOrder.length, windCycleCount, currentFeng]);
+
+    // Custom Alert Modal Component
+    const CustomAlertModal = ({ message, onClose }) => (
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Congratulations!</Text>
+                <Text style={styles.modalMessage}>{message}</Text>
+                <TouchableOpacity
+                    style={styles.modalButton}
+                    onPress={onClose}
+                >
+                    <Text style={styles.modalButtonText}>OK</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+
+    // Function to show custom alert
+    const showAlert = (message) => {
+        setAlertMessage(message);
+        setShowAlertModal(true);
+    };
 
     // Handle the "自摸" (Self-draw) button - now toggleable
     const handleSelfDraw = () => {
         if (isSelfDraw) {
-            // If already selected, deselect it
             setIsSelfDraw(false);
-            Alert.alert(
-                "自摸 Deselected",
-                "You can now enter who shot the losing tile."
-            );
+            showAlert("自摸 Deselected. You can now enter who shot the losing tile.");
         } else {
-            // Select self-draw mode
             setIsSelfDraw(true);
             setLosingTileShooter(''); // Clear shooter input
             Keyboard.dismiss();
-            Alert.alert(
-                "自摸 Mode Active",
-                "Self-draw means no 'shooter'. The other 3 players will pay the winner."
-            );
+            showAlert("自摸 Mode Active. Self-draw means no 'shooter'. The other 3 players will pay the winner.");
         }
     };
 
@@ -82,7 +202,7 @@ export default function ChipCountingScreen({ route }) {
         Keyboard.dismiss();
 
         if (!winner || isNaN(parseInt(taiCount)) || taiCount === '' || parseInt(taiCount) < 0) {
-            Alert.alert("Input Required", "Please enter a winner's username and a valid 'Tai' count (>= 0).");
+            showAlert("Please enter a winner's username and a valid 'Tai' count (>= 0).");
             return;
         }
 
@@ -90,19 +210,19 @@ export default function ChipCountingScreen({ route }) {
         const winningPlayer = players.find(p => p.name.toLowerCase() === winner.toLowerCase());
 
         if (!winningPlayer) {
-            Alert.alert("Invalid Winner", `${winner} is not a recognized player. Please enter an existing username.`);
+            showAlert(`${winner} is not a recognized player. Please enter an existing username.`);
             return;
         }
 
-        const basePointValue = 5;
+        const basePointValue = 5; // Example base point value
         let totalPointsToPay = basePointValue * Math.pow(2, tai - 1);
 
         if (tai === 0) {
             totalPointsToPay = basePointValue;
-            Alert.alert("0 Tai Win", `Assuming a minimum win of ${totalPointsToPay} chips for 0 Tai.`);
+            showAlert(`0 Tai Win: Assuming a minimum win of ${totalPointsToPay} chips.`);
         }
 
-        let updatedPlayers = players.map(p => ({ ...p }));
+        let updatedPlayers = players.map(p => ({ ...p })); // Create a mutable copy
 
         if (isSelfDraw) {
             const playersToPay = updatedPlayers.filter(p => p.id !== winningPlayer.id);
@@ -117,23 +237,23 @@ export default function ChipCountingScreen({ route }) {
                 const winnerIndex = updatedPlayers.findIndex(p => p.id === winningPlayer.id);
                 updatedPlayers[winnerIndex].chips += (amountPerPlayer * playersToPay.length);
             }
-            Alert.alert("自摸 Win!", `${winningPlayer.name} self-drew and gained ${totalPointsToPay * playersToPay.length} chips (${tai} Tai).`);
+            showAlert(`自摸 Win! ${winningPlayer.name} self-drew and gained ${totalPointsToPay * playersToPay.length} chips (${tai} Tai).`);
 
         } else {
             if (!losingTileShooter) {
-                Alert.alert("Input Required", "Please enter who shot the losing tile (放銃), or select '自摸' if it was a self-draw.");
+                showAlert("Please enter who shot the losing tile (放銃), or select '自摸' if it was a self-draw.");
                 return;
             }
 
             const shooterPlayer = updatedPlayers.find(p => p.name.toLowerCase() === losingTileShooter.toLowerCase());
 
             if (!shooterPlayer) {
-                Alert.alert("Invalid Shooter", `${losingTileShooter} is not a recognized player.`);
+                showAlert(`${losingTileShooter} is not a recognized player.`);
                 return;
             }
 
             if (shooterPlayer.id === winningPlayer.id) {
-                Alert.alert("Invalid Input", "The winner cannot be the shooter of their own winning tile (unless it's self-draw). Please check your input.");
+                showAlert("The winner cannot be the shooter of their own winning tile (unless it's self-draw). Please check your input.");
                 return;
             }
 
@@ -144,12 +264,43 @@ export default function ChipCountingScreen({ route }) {
                 updatedPlayers[winnerIndex].chips += totalPointsToPay;
                 updatedPlayers[shooterIndex].chips -= totalPointsToPay;
             }
-            Alert.alert("放銃 Win!", `${winningPlayer.name} won ${totalPointsToPay} chips (${tai} Tai) from ${shooterPlayer.name}.`);
+            showAlert(`放銃 Win! ${winningPlayer.name} won ${totalPointsToPay} chips (${tai} Tai) from ${shooterPlayer.name}.`);
         }
 
         setPlayers(updatedPlayers);
 
-        // Increment round count to update feng
+        // --- Banker Rotation Logic (UPDATED) ---
+        let nextBanker;
+        const isCurrentBankerWin = currentBanker && winningPlayer.id === currentBanker.id;
+        setBankerWonThisRound(isCurrentBankerWin); // Set the flag for the next screen
+
+        if (isCurrentBankerWin) {
+            nextBanker = currentBanker; // Banker remains if they win (连庄)
+            console.log("Banker won. Banker remains the same (连庄).");
+        } else {
+            // Banker rotates clockwise to the next player in the fixed player order
+            if (currentBanker && allPlayersInOrder.length > 0) {
+                const currentBankerIndex = allPlayersInOrder.findIndex(p => p.id === currentBanker.id);
+                if (currentBankerIndex !== -1) {
+                    const nextBankerIndex = (currentBankerIndex + 1) % allPlayersInOrder.length;
+                    nextBanker = allPlayersInOrder[nextBankerIndex];
+                    console.log(`New player won. Banker rotates clockwise from ${currentBanker.name} to ${nextBanker.name}.`);
+                } else {
+                    console.warn("Current banker not found in allPlayersInOrder. This should not happen with proper flow.");
+                    nextBanker = winningPlayer; // Fallback, though ideally, allPlayersInOrder should be robust
+                }
+            } else {
+                console.warn("No current banker or allPlayersInOrder. This indicates an issue in initial setup.");
+                nextBanker = winningPlayer; // Fallback, but indicates a potential problem
+            }
+        }
+        setCurrentBanker(nextBanker); // Update the banker state
+
+        // Add the next banker to the set of players who have been banker in the current wind cycle
+        // This set is used to determine when the wind changes.
+        setPlayersWhoWereBankerInCurrentWind(prev => new Set(prev).add(nextBanker.id));
+
+        // Always increment round count after a game round
         setRoundCount(prev => prev + 1);
 
         // Reset inputs after applying
@@ -165,22 +316,43 @@ export default function ChipCountingScreen({ route }) {
 
     const handleExitToHome = () => {
         setShowFinalResults(false);
+        // In a real app, you might want to clear game state or save final results to DB here
         navigation.navigate('Home');
+    };
+
+    const handleContinueToNextRound = () => {
+        // Update allPlayersInOrder with the current chip counts
+        const updatedAllPlayersInOrder = allPlayersInOrder.map(orderPlayer => {
+            const updatedPlayer = players.find(p => p.id === orderPlayer.id);
+            return updatedPlayer ? { ...orderPlayer, chips: updatedPlayer.chips } : orderPlayer;
+        });
+
+        navigation.navigate('DiceRollGame', {
+            players: players, // All players with their updated chip counts
+            banker: currentBanker, // The player who is the banker for the next round
+            roundNumber: roundCount, // The new round number
+            gameSessionId: gameSessionId || `game_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Preserve or create ID
+            allPlayersOrdered: updatedAllPlayersInOrder, // Pass the updated ordered list with current chips
+            lastRoundBankerWon: bankerWonThisRound, // Pass the crucial flag to DiceRollGameScreen
+            windCycleCount: windCycleCount, // Pass current wind cycle
+            playersWhoWereBankerInCurrentWind: playersWhoWereBankerInCurrentWind, // Pass wind tracking
+            allPlayers: players // Also pass as allPlayers for consistency
+        });
     };
 
     return (
         <SafeAreaView style={styles.fullScreenContainer}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.navButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.navButtonText}>← Back</Text>
+                <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+                    <Text style={styles.headerIcon}>←</Text>
                 </TouchableOpacity>
                 <Image
                     source={require('../assets/images/mahjonglah!.png')}
                     style={styles.headerLogo}
                     resizeMode="contain"
                 />
-                <View style={styles.navButtonPlaceholder} />
+                <View style={styles.headerButton} /> {/* Placeholder for alignment */}
             </View>
 
             {/* Main Content Area */}
@@ -198,15 +370,23 @@ export default function ChipCountingScreen({ route }) {
                         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                             <View>
                                 <Text style={styles.title}>Current Chip Count:</Text>
+                                <Text style={styles.roundInfoText}>Round: {roundCount} {currentFeng}風</Text>
 
                                 <View style={styles.playerChipsContainer}>
                                     {players.map(player => (
-                                        <View key={player.id} style={styles.playerChipCard}>
+                                        <View key={player.id}
+                                            style={[
+                                                styles.playerChipCard,
+                                                currentBanker && player.id === currentBanker.id && styles.bankerChipCard
+                                            ]}
+                                        >
                                             <Image
                                                 source={require('../assets/images/boy1.png')}
                                                 style={styles.playerChipAvatar}
                                             />
-                                            <Text style={styles.playerChipName}>{player.name}</Text>
+                                            <Text style={styles.playerChipName}>
+                                                {player.name}
+                                            </Text>
                                             <Text style={styles.playerChipCount}>x {player.chips}</Text>
                                         </View>
                                     ))}
@@ -227,7 +407,7 @@ export default function ChipCountingScreen({ route }) {
                             />
                             <TouchableOpacity
                                 style={[
-                                    styles.miniButton, 
+                                    styles.miniButton,
                                     isSelfDraw ? styles.selfDrawButtonActive : styles.selfDrawButton
                                 ]}
                                 onPress={handleSelfDraw}
@@ -261,6 +441,11 @@ export default function ChipCountingScreen({ route }) {
                                 <Text style={styles.miniButtonText}>Apply</Text>
                             </TouchableOpacity>
                         </View>
+
+                        {/* "Continue to Next Round" Button */}
+                        <TouchableOpacity style={styles.continueButton} onPress={handleContinueToNextRound}>
+                            <Text style={styles.continueButtonText}>Continue to Next Round</Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity style={styles.endGameButton} onPress={handleEndGame}>
                             <Text style={styles.endGameButtonText}>End Game</Text>
@@ -301,9 +486,9 @@ export default function ChipCountingScreen({ route }) {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>🎉 Game Results</Text>
-                        
+
                         <Text style={styles.roundInfo}>
-                            Game ended after {roundCount} round{roundCount !== 1 ? 's' : ''}
+                            Game ended after {roundCount - 1} round{roundCount - 1 !== 1 ? 's' : ''}
                         </Text>
                         <Text style={styles.fengInfo}>
                             Final wind: {currentFeng}
@@ -311,7 +496,7 @@ export default function ChipCountingScreen({ route }) {
 
                         <View style={styles.finalScoresContainer}>
                             <Text style={styles.finalScoresTitle}>Final Chip Counts:</Text>
-                            
+
                             {players
                                 .sort((a, b) => b.chips - a.chips) // Sort by chips (highest first)
                                 .map((player, index) => (
@@ -326,7 +511,7 @@ export default function ChipCountingScreen({ route }) {
                                         <Text style={styles.finalScoreName}>{player.name}</Text>
                                         <Text style={[
                                             styles.finalScoreChips,
-                                            player.chips > 1000 ? styles.positiveChips : 
+                                            player.chips > 1000 ? styles.positiveChips :
                                             player.chips < 1000 ? styles.negativeChips : styles.neutralChips
                                         ]}>
                                             {player.chips} chips
@@ -345,6 +530,19 @@ export default function ChipCountingScreen({ route }) {
                     </View>
                 </View>
             </Modal>
+
+            {/* Custom Alert Modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={showAlertModal}
+                onRequestClose={() => setShowAlertModal(false)}
+            >
+                <CustomAlertModal
+                    message={alertMessage}
+                    onClose={() => setShowAlertModal(false)}
+                />
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -358,38 +556,22 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20,
-        paddingBottom: 15,
-        backgroundColor: '#004d00',
+        paddingHorizontal: 15, // Adjusted padding
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50, // Adjusted padding
+        paddingBottom: 10, // Adjusted padding
+        backgroundColor: '#004d00', // Ensure header background is consistent
     },
-    navButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 8,
+    headerButton: { // Style for the back button container
+        padding: 5,
     },
-    navButtonText: {
+    headerIcon: { // Style for the back arrow icon
+        fontSize: 24,
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    headerTitle: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
-        flex: 1,
-        textAlign: 'center',
-        marginLeft: -10,
-        marginRight: -10,
     },
     headerLogo: {
-        width: 120,
+        width: 120, // Adjusted width for logo
         height: 40,
         resizeMode: 'contain',
-    },
-    navButtonPlaceholder: {
-        width: 44,
-        height: 44,
     },
     contentContainer: {
         backgroundColor: '#fff',
@@ -433,8 +615,15 @@ const styles = StyleSheet.create({
     title: {
         color: '#004d00',
         fontSize: 20,
-        marginBottom: 25,
+        marginBottom: 15,
         fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    roundInfoText: {
+        color: '#004d00',
+        fontSize: 16,
+        marginBottom: 25,
+        fontWeight: '600',
         textAlign: 'center',
     },
     playerChipsContainer: {
@@ -453,6 +642,11 @@ const styles = StyleSheet.create({
         width: '45%',
         borderWidth: 1,
         borderColor: '#e0e0e0',
+    },
+    bankerChipCard: { // New style for the banker's card
+        backgroundColor: 'rgba(248, 177, 0, 0.2)', // Translucent amber
+        borderColor: '#F8B100', // Solid amber border
+        borderWidth: 2,
     },
     playerChipAvatar: {
         width: 60,
@@ -540,13 +734,31 @@ const styles = StyleSheet.create({
     activeButtonText: {
         color: '#fff', // White text when active
     },
+    continueButton: {
+        backgroundColor: '#007bff', // Blue for continue
+        paddingVertical: 15,
+        borderRadius: 12,
+        width: '100%',
+        alignItems: 'center',
+        marginTop: 30,
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+    },
+    continueButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
     endGameButton: {
         backgroundColor: '#dc3545',
         paddingVertical: 15,
         borderRadius: 12,
         width: '100%',
         alignItems: 'center',
-        marginTop: 30,
+        marginTop: 15, // Space between continue and end game
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -710,6 +922,25 @@ const styles = StyleSheet.create({
     exitButtonText: {
         color: '#fff',
         fontSize: 18,
+        fontWeight: 'bold',
+    },
+    // Custom Alert Modal Styles (re-using some existing modal styles)
+    modalMessage: {
+        fontSize: 16,
+        color: '#333',
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    modalButton: {
+        backgroundColor: '#004d00',
+        paddingVertical: 12,
+        paddingHorizontal: 25,
+        borderRadius: 10,
+        marginTop: 10,
+    },
+    modalButtonText: {
+        color: '#fff',
+        fontSize: 16,
         fontWeight: 'bold',
     },
 });

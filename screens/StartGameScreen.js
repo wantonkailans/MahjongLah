@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,25 +13,85 @@ import {
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+// --- Crucial Firebase Imports ---
+// Ensure these paths are correct relative to your firebase.js file
+import { auth, db } from '../firebase'; // Assuming your firebase.js exports 'auth' and 'db'
+import { doc, getDoc } from 'firebase/firestore'; // Firestore functions for database operations
+import { onAuthStateChanged } from 'firebase/auth'; // Correct import for authentication state changes
 
 const StartGameScreen = () => {
   const navigation = useNavigation();
-  
+
+  // State for current authenticated user and their profile image
+  const [user, setUser] = useState(null);
+  const [profileImage, setProfileImage] = useState(null);
+  // New state to manage loading of profile data, prevents showing default briefly
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+
+  // Existing states for game setup
   const [player1Username, setPlayer1Username] = useState('');
   const [player2Username, setPlayer2Username] = useState('');
   const [player3Username, setPlayer3Username] = useState('');
   const [player4Username, setPlayer4Username] = useState('');
-  const [loading, setLoading] = useState(false);
-  
-  // New states for validation feedback
+  const [loading, setLoading] = useState(false); // For game start button
+
+  // Existing states for username validation
   const [validationResults, setValidationResults] = useState({});
   const [showValidationResults, setShowValidationResults] = useState(false);
   const [missingUsernames, setMissingUsernames] = useState([]);
   const [foundUsernames, setFoundUsernames] = useState([]);
 
+  // useEffect hook to handle Firebase authentication state and fetch profile
+  useEffect(() => {
+    console.log('StartGameScreen: useEffect triggered for auth state change observer setup.');
+    // Set loading to true immediately when starting to fetch profile
+    setIsProfileLoading(true);
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      console.log('StartGameScreen: onAuthStateChanged callback received. User:', currentUser ? currentUser.uid : 'null (signed out)');
+      if (currentUser) {
+        setUser(currentUser); // Set the current user object
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            console.log('StartGameScreen: User document found. Profile data:', userData);
+            // Set profileImage; if userData.profileImage is undefined/null, it will be null
+            setProfileImage(userData.profileImage || null);
+          } else {
+            console.log('StartGameScreen: No user document found for UID:', currentUser.uid);
+            setProfileImage(null); // Explicitly set to null if no doc
+          }
+        } catch (error) {
+          // Log any errors during Firebase data fetching
+          console.error('StartGameScreen: Error fetching user profile image from Firestore:', error);
+          setProfileImage(null); // Fallback to default on error
+        } finally {
+          // Ensure loading is set to false after attempt, regardless of success/failure
+          setIsProfileLoading(false);
+          console.log('StartGameScreen: Profile loading finished.');
+        }
+      } else {
+        // User is signed out
+        console.log('StartGameScreen: User signed out. Clearing user and profile image states.');
+        setUser(null);
+        setProfileImage(null);
+        setIsProfileLoading(false); // No longer loading if no user
+      }
+    });
+
+    // Cleanup function: This runs when the component unmounts
+    return () => {
+      console.log('StartGameScreen: Unsubscribing from Firebase auth state changes.');
+      unsubscribe();
+    };
+  }, []); // Empty dependency array ensures this runs only once on component mount
+
   const handleStartGame = async () => {
     console.log('=== START GAME VALIDATION ===');
-    
+
     // Reset previous validation results
     setValidationResults({});
     setShowValidationResults(false);
@@ -40,7 +100,7 @@ const StartGameScreen = () => {
 
     const enteredUsernames = [player1Username, player2Username, player3Username, player4Username].filter(Boolean);
     console.log('Entered usernames:', enteredUsernames);
-    
+
     if (enteredUsernames.length !== 4) {
       Alert.alert('Error', 'Please enter usernames for all 4 players.');
       return;
@@ -53,74 +113,61 @@ const StartGameScreen = () => {
     }
 
     setLoading(true);
-    
+
     try {
       console.log('Starting username validation...');
-      
-      // Import Firebase here to catch any import errors
-      const { collection, query, where, getDocs } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
-      
-      console.log('Firebase imports successful, db:', db);
-      
-      const usersRef = collection(db, 'users');
+
+      // Mock registered users for demonstration. Replace with actual Firestore query if needed.
+      const mockRegisteredUsers = ['audrey', 'wanton', 'aud', 'audreyng'];
+
       const foundPlayers = [];
       const missingUsernamesList = [];
       const foundUsernamesList = [];
       const results = {};
 
-      // Check each username
       for (const username of enteredUsernames) {
         console.log(`Checking username: ${username}`);
-        
-        try {
-          const q = query(usersRef, where('username', '==', username.toLowerCase()));
-          const querySnapshot = await getDocs(q);
 
-          if (querySnapshot.empty) {
-            console.log(`❌ Username "${username}" NOT found`);
-            missingUsernamesList.push(username);
-            results[username] = { found: false, status: 'not_found' };
-          } else {
-            console.log(`✅ Username "${username}" found`);
-            foundUsernamesList.push(username);
-            results[username] = { found: true, status: 'found' };
-            
-            querySnapshot.forEach(doc => {
-              foundPlayers.push({ 
-                uid: doc.id, 
-                username: doc.data().username,
-                displayName: doc.data().displayName || doc.data().username 
-              });
-            });
-          }
-        } catch (userError) {
-          console.error(`Error checking username ${username}:`, userError);
+        // Simulate network delay for username validation
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        if (mockRegisteredUsers.includes(username.toLowerCase())) {
+          console.log(`✅ Username "${username}" found`);
+          foundUsernamesList.push(username);
+          results[username] = { found: true, status: 'found' };
+          foundPlayers.push({
+            id: `user_${username.toLowerCase()}`, // Using a simple ID for mock players
+            name: username,
+            chips: 1000,
+            originalIndex: enteredUsernames.indexOf(username)
+          });
+        } else {
+          console.log(`❌ Username "${username}" NOT found`);
           missingUsernamesList.push(username);
-          results[username] = { found: false, status: 'error' };
+          results[username] = { found: false, status: 'not_found' };
         }
       }
 
-      // Update state with validation results
       setValidationResults(results);
       setMissingUsernames(missingUsernamesList);
       setFoundUsernames(foundUsernamesList);
       setShowValidationResults(true);
 
-      console.log('Found players:', foundPlayers);
+      console.log('Found players (formatted):', foundPlayers);
       console.log('Missing usernames:', missingUsernamesList);
 
-      // If some usernames don't exist, show the results but don't navigate
       if (missingUsernamesList.length > 0) {
         console.log('Some usernames not found - showing validation results');
         setLoading(false);
         return;
       }
 
-      console.log('✅ All usernames validated. Navigating to DiceRollGame...');
-      
-      // All usernames exist, navigate to dice roll screen
-      navigation.navigate('DiceRollGame', { players: foundPlayers });
+      console.log('✅ All usernames validated. Navigating to DetermineBankerScreen...');
+
+      // Navigate to DetermineBanker screen with the validated players
+      navigation.navigate('DetermineBanker', {
+        players: foundPlayers,
+      });
 
     } catch (error) {
       console.error("❌ Error validating usernames:", error);
@@ -130,8 +177,7 @@ const StartGameScreen = () => {
     }
   };
 
-  // Simple test to make sure the component renders
-  console.log('StartGameScreen rendering...');
+  console.log('StartGameScreen: Component rendering.');
 
   return (
     <View style={styles.container}>
@@ -141,15 +187,26 @@ const StartGameScreen = () => {
           <Text style={styles.headerIcon}>←</Text>
         </TouchableOpacity>
         <Image
-          source={require('../assets/images/mahjonglah!.png')}
+          source={require('../assets/images/mahjonglah!.png')} // Your logo image
           style={styles.headerLogo}
           resizeMode="contain"
         />
-        <TouchableOpacity style={styles.headerButton}>
-          <Image
-            source={require('../assets/images/boy1.png')}
-            style={styles.profileImage}
-          />
+        {/* Profile Picture / User Icon */}
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('Profile')}>
+          {/* Conditional rendering based on loading state and profileImage existence */}
+          {isProfileLoading ? (
+            <ActivityIndicator color="#fff" size="small" /> // Show spinner while loading
+          ) : profileImage ? (
+            <Image
+              source={{ uri: profileImage }} // Use fetched profile image
+              style={styles.profileImage}
+            />
+          ) : (
+            <Image
+              source={require('../assets/images/boy1.png')} // Default 'boy1.png' if no PFP or error
+              style={styles.profileImage}
+            />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -157,7 +214,7 @@ const StartGameScreen = () => {
         <View style={styles.gameSetupCard}>
           <Text style={styles.gameSetupTitle}>Enter Player Usernames</Text>
           <Text style={styles.gameSetupSubtitle}>Please enter the usernames of all 4 players</Text>
-          
+
           <TextInput
             style={styles.input}
             placeholder="Player 1 Username"
@@ -190,9 +247,9 @@ const StartGameScreen = () => {
             onChangeText={setPlayer4Username}
             autoCapitalize="none"
           />
-          
-          <TouchableOpacity 
-            style={[styles.startButton, loading && styles.buttonDisabled]} 
+
+          <TouchableOpacity
+            style={[styles.startButton, loading && styles.buttonDisabled]}
             onPress={handleStartGame}
             disabled={loading}
           >
@@ -207,7 +264,7 @@ const StartGameScreen = () => {
           {showValidationResults && (
             <View style={styles.validationContainer}>
               <Text style={styles.validationTitle}>Validation Results</Text>
-              
+
               {foundUsernames.length > 0 && (
                 <View style={styles.foundUsersSection}>
                   <Text style={styles.foundUsersTitle}>✅ Found Users:</Text>
@@ -227,7 +284,7 @@ const StartGameScreen = () => {
                       <Text style={styles.missingUserText}>{username}</Text>
                     </View>
                   ))}
-                  
+
                   <View style={styles.instructionBox}>
                     <Text style={styles.instructionTitle}>What to do next:</Text>
                     <Text style={styles.instructionText}>
@@ -238,7 +295,7 @@ const StartGameScreen = () => {
                     </Text>
                   </View>
 
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.tryAgainButton}
                     onPress={() => {
                       setShowValidationResults(false);
@@ -263,14 +320,14 @@ const StartGameScreen = () => {
             <Text style={styles.navTextIcon}>🏠</Text>
           </View>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>🔍</Text>
           </View>
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Profile pressed')}>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>👤</Text>
           </View>
@@ -309,6 +366,8 @@ const styles = StyleSheet.create({
     width: 35,
     height: 35,
     borderRadius: 17.5,
+    borderWidth: 1, // Added border for better visibility
+    borderColor: '#fff', // White border
   },
   scrollViewContent: {
     alignItems: 'center',
@@ -405,7 +464,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#666',
   },
-  // Validation Results Styles
   validationContainer: {
     width: '100%',
     marginTop: 20,

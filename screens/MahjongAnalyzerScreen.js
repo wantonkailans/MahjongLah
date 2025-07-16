@@ -1,10 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Image, Text, ScrollView, Alert, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { 
+  View, 
+  Image, 
+  Text, 
+  ScrollView, 
+  Alert, 
+  ActivityIndicator, 
+  TouchableOpacity, 
+  StyleSheet,
+  Platform,
+  StatusBar,
+  SafeAreaView 
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function MahjongAnalyzer() {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<any>(null);
+  const navigation = useNavigation();
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [serverStatus, setServerStatus] = useState('Checking...');
 
@@ -50,7 +64,7 @@ export default function MahjongAnalyzer() {
         setAnalysis(null);
         console.log('Image selected:', result.assets[0].uri);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error picking image:', error);
       Alert.alert('Error', 'Failed to pick image: ' + error.message);
     }
@@ -72,7 +86,7 @@ export default function MahjongAnalyzer() {
         uri: selectedImage,
         type: 'image/jpeg',
         name: 'mahjong_hand.jpg',
-      } as any);
+      });
 
       console.log('Sending FormData with image URI:', selectedImage);
 
@@ -112,7 +126,7 @@ export default function MahjongAnalyzer() {
       } else {
         Alert.alert('No Tiles Found', 'No mahjong tiles were detected in the image.');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Analysis error:', error);
 
       let errorMessage = 'Failed to analyze image';
@@ -142,7 +156,7 @@ export default function MahjongAnalyzer() {
         uri: selectedImage,
         type: 'image/jpeg',
         name: 'test_image.jpg',
-      } as any);
+      });
 
       console.log('Testing upload...');
 
@@ -158,13 +172,13 @@ export default function MahjongAnalyzer() {
       console.log('Test upload result:', result);
       
       Alert.alert('Test Upload Result', JSON.stringify(result, null, 2));
-    } catch (error: any) {
+    } catch (error) {
       console.error('Test upload error:', error);
       Alert.alert('Test Upload Error', error.message);
     }
   };
 
-  const formatAnalysisResult = (analysis: any) => {
+  const formatAnalysisResult = (analysis) => {
     if (!analysis) return '';
     let result = '';
 
@@ -193,11 +207,32 @@ export default function MahjongAnalyzer() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.headerIcon}>←</Text>
+        </TouchableOpacity>
+        <Image
+          source={require('../assets/images/mahjonglah!.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+        <TouchableOpacity style={styles.headerButton}>
+          <Image
+            source={require('../assets/images/boy1.png')}
+            style={styles.profileImage}
+          />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header Card */}
         <View style={styles.headerCard}>
-          <Text style={styles.title}>🀄 Mahjong Hand Analyzer</Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.titleEmoji}>🀄</Text>
+            <Text style={styles.title}>Mahjong Hand Analyzer</Text>
+          </View>
           <Text style={styles.subtitle}>Analyze your tiles with AI assistance</Text>
         </View>
 
@@ -278,7 +313,28 @@ export default function MahjongAnalyzer() {
           </View>
         )}
       </ScrollView>
-    </View>
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNavBar}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🏠</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🔍</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Profile pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>👤</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -287,9 +343,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#004d00',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50,
+    paddingBottom: 10,
+  },
+  headerButton: {
+    padding: 5,
+  },
+  headerIcon: {
+    fontSize: 24,
+    color: '#fff',
+  },
+  headerLogo: {
+    width: 120,
+    height: 40,
+    resizeMode: 'contain',
+  },
+  profileImage: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+  },
   scrollContent: {
     paddingVertical: 20,
     paddingHorizontal: 16,
+    paddingBottom: 100, // Add padding to account for bottom nav
   },
   headerCard: {
     backgroundColor: 'white',
@@ -303,11 +385,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  titleEmoji: {
+    fontSize: 28,
+    marginRight: 12,
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#004d00',
-    marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
@@ -497,5 +589,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+  },
+  bottomNavBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 15,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  navIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTextIcon: {
+    fontSize: 24,
+    color: '#666',
   },
 });
