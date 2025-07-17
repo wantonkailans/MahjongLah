@@ -60,6 +60,21 @@ export default function HomeScreen() {
     navigation.navigate('Profile');
   };
 
+  const handleSearchPress = () => {
+    console.log('Search pressed');
+    navigation.navigate('Search');
+  };
+
+  const handleLeaderboardPress = () => {
+    console.log('Leaderboard pressed');
+    navigation.navigate('Leaderboard');
+  };
+
+  const handleKakiFinderPress = () => {
+    console.log('Mahjong Kaki Finder pressed');
+    navigation.navigate('Search');
+  };
+
   return (
     <View style={styles.container}>
       {/* Top Header */}
@@ -157,7 +172,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.kakiButton} onPress={() => console.log('Find Kaki pressed')}>
+          <TouchableOpacity style={styles.kakiButton} onPress={handleLeaderboardPress}>
             <Text style={styles.kakiButtonText}>View Leaderboard!</Text>
           </TouchableOpacity>
         </View>
@@ -183,7 +198,7 @@ export default function HomeScreen() {
 
         {/* Friend Finder Section */}
         <TouchableOpacity
-          onPress={() => console.log('Mahjong Kaki Finder pressed')}
+          onPress={handleKakiFinderPress}
           activeOpacity={0.8}
           style={styles.friendSection}
         >
@@ -207,7 +222,7 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
+        <TouchableOpacity style={styles.navItem} onPress={handleSearchPress}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>🔍</Text>
           </View>
