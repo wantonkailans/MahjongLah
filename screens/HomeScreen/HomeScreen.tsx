@@ -165,7 +165,7 @@ export default function HomeScreen() {
 
         {/* Need a Friend Section */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('FriendFinder')}
+          onPress={() => navigation.navigate('Search')}
           activeOpacity={0.8}
           style={styles.friendSection}
         >
