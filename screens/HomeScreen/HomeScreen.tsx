@@ -19,7 +19,13 @@ export default function HomeScreen() {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUsername(userData.displayName || userData.username || 'User');
-            setProfileImage(userData.profileImage || null);
+            
+            // Handle profile image
+            let profileImageData = userData.profileImage;
+            if (profileImageData && !profileImageData.startsWith('data:')) {
+              profileImageData = `data:image/jpeg;base64,${profileImageData}`;
+            }
+            setProfileImage(profileImageData || null);
           } else {
             setUsername('User');
           }
@@ -70,6 +76,10 @@ export default function HomeScreen() {
             <Image 
               source={{ uri: profileImage }} 
               style={styles.headerProfileAvatar} 
+              onError={(error) => {
+                console.warn('Error loading header profile image:', error);
+                setProfileImage(null);
+              }}
             />
           ) : (
             <Image 
@@ -148,7 +158,7 @@ export default function HomeScreen() {
           </View>
 
           <TouchableOpacity style={styles.kakiButton} onPress={() => console.log('Find Kaki pressed')}>
-            <Text style={styles.kakiButtonText}>Find your Mahjong Kaki today!</Text>
+            <Text style={styles.kakiButtonText}>View Leaderboard</Text>
           </TouchableOpacity>
         </View>
 
