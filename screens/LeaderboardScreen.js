@@ -1,70 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  Image, 
-  TouchableOpacity, 
-  Platform, 
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  Platform,
   StatusBar,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { db } from '../firebase';
-import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  query,
+  orderBy,
+  getDocs,
+  limit,
+} from 'firebase/firestore';
+
+const db = getFirestore();
 
 export default function LeaderboardScreen() {
   const navigation = useNavigation();
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedTab, setSelectedTab] = useState('winRate'); // 'winRate', 'gamesPlayed', 'totalWins'
 
   useEffect(() => {
     loadLeaderboard();
-  }, [selectedTab]);
+  }, []);
 
   const loadLeaderboard = async () => {
     try {
       setIsLoading(true);
-      let orderField = 'winRate';
-      
-      switch (selectedTab) {
-        case 'gamesPlayed':
-          orderField = 'gamesPlayed';
-          break;
-        case 'totalWins':
-          orderField = 'totalWins';
-          break;
-        default:
-          orderField = 'winRate';
-      }
-
+      // Changed from 'users' to 'leaderboard' to match your utility function
       const leaderboardQuery = query(
-        collection(db, 'users'),
-        orderBy(orderField, 'desc'),
+        collection(db, 'leaderboard'),
+        orderBy('totalScore', 'desc'),
         limit(50)
       );
 
       const querySnapshot = await getDocs(leaderboardQuery);
-      const players = [];
-      
-      querySnapshot.forEach((doc, index) => {
+      const players = querySnapshot.docs.map((doc, index) => {
         const userData = doc.data();
-        players.push({
+        return {
           id: doc.id,
           rank: index + 1,
-          displayName: userData.displayName || userData.username || 'Anonymous',
+          displayName: userData.displayName || 'Anonymous',
           email: userData.email || 'No email',
           avatar: userData.avatar || require('../assets/images/boy1.png'),
-          gamesPlayed: userData.gamesPlayed || 0,
-          winRate: userData.winRate || 0,
-          totalWins: userData.totalWins || 0,
-          totalPoints: userData.totalPoints || 0,
-          lastActive: userData.lastActive || null
-        });
+          totalScore: userData.totalScore || 0,
+        };
       });
 
       setLeaderboardData(players);
@@ -95,109 +84,62 @@ export default function LeaderboardScreen() {
   };
 
   const getRankStyle = (rank) => {
-    if (rank <= 3) {
-      return [styles.rankNumber, styles.topThreeRank];
-    }
+    if (rank <= 3) return [styles.rankNumber, styles.topThreeRank];
     return styles.rankNumber;
-  };
-
-  const getStatValue = (player) => {
-    switch (selectedTab) {
-      case 'gamesPlayed':
-        return `${player.gamesPlayed} games`;
-      case 'totalWins':
-        return `${player.totalWins} wins`;
-      default:
-        return `${(player.winRate * 100).toFixed(1)}%`;
-    }
   };
 
   const renderPlayerRow = (player) => (
     <TouchableOpacity key={player.id} style={styles.playerRow}>
       <View style={styles.rankContainer}>
-        <Text style={getRankStyle(player.rank)}>
-          {getRankIcon(player.rank)}
-        </Text>
+        <Text style={getRankStyle(player.rank)}>{getRankIcon(player.rank)}</Text>
       </View>
-      
-      <Image 
-        source={typeof player.avatar === 'string' ? { uri: player.avatar } : player.avatar}
-        style={styles.playerAvatar} 
+
+      <Image
+        source={
+          typeof player.avatar === 'string'
+            ? { uri: player.avatar }
+            : player.avatar
+        }
+        style={styles.playerAvatar}
       />
-      
+
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{player.displayName}</Text>
         <Text style={styles.playerEmail}>{player.email}</Text>
-        <Text style={styles.playerStats}>
-          Games: {player.gamesPlayed} | Wins: {player.totalWins}
-        </Text>
       </View>
-      
+
       <View style={styles.statContainer}>
-        <Text style={styles.statValue}>{getStatValue(player)}</Text>
-        <Text style={styles.statLabel}>
-          {selectedTab === 'winRate' ? 'Win Rate' : 
-           selectedTab === 'gamesPlayed' ? 'Games' : 'Total Wins'}
-        </Text>
+        <Text style={styles.statValue}>{player.totalScore} pts</Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
+      {/* Header */}
       <View style={styles.appHeader}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => navigation.goBack()}
+        >
           <Text style={styles.headerIcon}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Leaderboard</Text>
-        <TouchableOpacity style={styles.headerButton} onPress={() => console.log('Share leaderboard')}>
-          <Text style={styles.headerIcon}>📤</Text>
-        </TouchableOpacity>
+        <View style={{ width: 30 }} />
       </View>
 
-      {/* NUS Community Header */}
+      {/* Leaderboard Info */}
       <View style={styles.communityHeader}>
         <View style={styles.communityTitleContainer}>
           <Text style={styles.communityTitle}>NUS Community Rankings</Text>
-          <Image 
-            source={require('../assets/images/nus.png')} 
-            style={styles.nusLogo} 
+          <Image
+            source={require('../assets/images/nus.png')}
+            style={styles.nusLogo}
           />
         </View>
         <Text style={styles.communitySubtitle}>
           {leaderboardData.length} active players
         </Text>
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, selectedTab === 'winRate' && styles.activeTab]}
-          onPress={() => setSelectedTab('winRate')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'winRate' && styles.activeTabText]}>
-            Win Rate
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, selectedTab === 'gamesPlayed' && styles.activeTab]}
-          onPress={() => setSelectedTab('gamesPlayed')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'gamesPlayed' && styles.activeTabText]}>
-            Games Played
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, selectedTab === 'totalWins' && styles.activeTab]}
-          onPress={() => setSelectedTab('totalWins')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'totalWins' && styles.activeTabText]}>
-            Total Wins
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* Leaderboard List */}
@@ -207,7 +149,7 @@ export default function LeaderboardScreen() {
           <Text style={styles.loadingText}>Loading leaderboard...</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollViewContent}
           showsVerticalScrollIndicator={false}
@@ -221,34 +163,20 @@ export default function LeaderboardScreen() {
           }
         >
           <View style={styles.leaderboardCard}>
-            {leaderboardData.map(player => renderPlayerRow(player))}
+            {leaderboardData.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No players yet</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Be the first to play and appear on the leaderboard!
+                </Text>
+              </View>
+            ) : (
+              leaderboardData.map(renderPlayerRow)
+            )}
           </View>
-
-          {/* Bottom spacing */}
           <View style={styles.bottomSpacing} />
         </ScrollView>
       )}
-
-      {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNavBar}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
-          <View style={styles.navIconContainer}>
-            <Text style={styles.navTextIcon}>🏠</Text>
-          </View>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Search')}>
-          <View style={styles.navIconContainer}>
-            <Text style={styles.navTextIcon}>🔍</Text>
-          </View>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Profile pressed')}>
-          <View style={styles.navIconContainer}>
-            <Text style={styles.navTextIcon}>👤</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -301,32 +229,6 @@ const styles = StyleSheet.create({
   communitySubtitle: {
     fontSize: 14,
     color: '#cccccc',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    borderRadius: 25,
-    padding: 5,
-    marginBottom: 15,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: '#004d00',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  activeTabText: {
-    color: '#fff',
   },
   loadingContainer: {
     flex: 1,
@@ -392,11 +294,6 @@ const styles = StyleSheet.create({
   playerEmail: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 2,
-  },
-  playerStats: {
-    fontSize: 11,
-    color: '#888',
   },
   statContainer: {
     alignItems: 'flex-end',
@@ -406,46 +303,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#004d00',
-    marginBottom: 2,
   },
-  statLabel: {
-    fontSize: 10,
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#666',
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#888',
     textAlign: 'center',
   },
   bottomSpacing: {
     height: 20,
-  },
-  bottomNavBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingVertical: 15,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 5,
-  },
-  navIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navTextIcon: {
-    fontSize: 24,
-    color: '#666',
   },
 });

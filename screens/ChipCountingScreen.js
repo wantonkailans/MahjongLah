@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment, setDoc } from 'firebase/firestore';
 
 export default function ChipCountingScreen({ route }) {
     const navigation = useNavigation();
@@ -451,11 +451,66 @@ export default function ChipCountingScreen({ route }) {
         setShowFinalResults(true);
     };
 
-    const handleExitToHome = () => {
-        setShowFinalResults(false);
-        // In a real app, you might want to clear game state or save final results to DB here
-        navigation.navigate('Home');
+
+const handleExitToHome = async () => {
+  try {
+    const gameDoc = {
+      createdAt: serverTimestamp(),
+      finalWind: currentFeng,
+      gameType: 'standard',
+      players: players.map((p, index) => ({
+        displayName: p.name,
+        uid: p.id,
+        finalChips: p.chips,
+        finalPosition: index + 1, // you can refine if needed
+        pointsEarned: p.chips - 1000,
+      }))
     };
+
+    await addDoc(collection(db, 'games'), gameDoc);
+    console.log('✅ Game record stored in "games" collection.');
+
+    // Update each player's totalScore in users and leaderboard
+    for (const p of players) {
+      const delta = p.chips - 1000;
+
+      // 1. Update users collection
+      const userRef = doc(db, 'users', p.id);
+      await updateDoc(userRef, {
+        totalScore: increment(delta),
+        lastPlayed: serverTimestamp(),
+      });
+
+      // 2. Update or create leaderboard entry
+      const leaderboardRef = doc(db, 'leaderboard', p.id);
+      const leaderboardSnap = await getDoc(leaderboardRef);
+      if (leaderboardSnap.exists()) {
+        await updateDoc(leaderboardRef, {
+          totalScore: increment(delta),
+          lastPlayed: serverTimestamp(),
+        });
+      } else {
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.exists() ? userSnap.data() : {};
+        await setDoc(leaderboardRef, {
+          displayName: p.name,
+          email: userData.email || '',
+          avatar: userData.avatar || '',
+          totalScore: delta,
+          lastPlayed: serverTimestamp(),
+        });
+      }
+    }
+
+    console.log('✅ All player scores updated successfully.');
+  } catch (error) {
+    console.error('❌ Error storing game results or updating scores:', error);
+  }
+
+  setShowFinalResults(false);
+  navigation.navigate('Home');
+};
+
 
     const handleContinueToNextRound = () => {
         // Update allPlayersInOrder with the current chip counts
