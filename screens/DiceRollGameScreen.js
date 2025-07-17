@@ -13,6 +13,8 @@ import {
   SafeAreaView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function DiceRollGameScreen({ route }) {
   const navigation = useNavigation();
@@ -20,7 +22,7 @@ export default function DiceRollGameScreen({ route }) {
   // Extract initial game state from navigation params
   const {
     players: initialPlayersFromRoute,
-    banker: initialBankerFromRoute, // The banker for this round (already determined)
+    banker: initialBankerFromRoute,
     roundNumber: initialRoundNumber = 1,
     gameWindDirection: initialGameWindDirection = 1,
     gameSeatWind: initialGameSeatWind = 1,
@@ -31,30 +33,25 @@ export default function DiceRollGameScreen({ route }) {
     playersWhoWereBankerInCurrentWind: initialPlayersWhoWereBankerInCurrentWind = new Set()
   } = route.params || {};
 
-  // All players in a consistent order, ensuring 'id' and 'name' are available
+  // All players in a consistent order
   const [allPlayers, setAllPlayers] = useState(() => {
-    // Priority: use allPlayersOrdered if available, then initialPlayersFromRoute
     let playersToUse = allPlayersOrderedFromRoute || initialPlayersFromRoute;
     
     if (playersToUse && playersToUse.length > 0) {
       return playersToUse.map((player, index) => ({
         id: player.id || player.uid || `player_${index}`,
         name: player.name || player.displayName || player.username || `Player ${index + 1}`,
-        chips: player.chips !== undefined ? player.chips : 1000, // Preserve existing chips
+        chips: player.chips !== undefined ? player.chips : 1000,
         originalIndex: player.originalIndex !== undefined ? player.originalIndex : index,
+        profileImage: null,
+        profileImageLoaded: false
       }));
     } else {
-      // Fallback for initial load if no players are passed (e.g., direct navigation during development)
-      return [
-        { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0 },
-        { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1 },
-        { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2 },
-        { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3 },
-      ];
+      return [];
     }
   });
 
-  // Game state for the dice rolling phase (now only for banker's roll)
+  // Game state
   const [bankerRollValue, setBankerRollValue] = useState(0);
   const [bankerHasRolled, setBankerHasRolled] = useState(false);
   const [message, setMessage] = useState('');
@@ -63,7 +60,7 @@ export default function DiceRollGameScreen({ route }) {
 
   // Mahjong specific states
   const [currentBanker, setCurrentBanker] = useState(initialBankerFromRoute || null);
-  const [currentDistributor, setCurrentDistributor] = useState(null); // Determined by banker's roll
+  const [currentDistributor, setCurrentDistributor] = useState(null);
   const [roundNumber, setRoundNumber] = useState(initialRoundNumber);
   const [windDirection, setWindDirection] = useState(initialGameWindDirection);
   const [seatWind, setSeatWind] = useState(initialGameSeatWind);
@@ -83,7 +80,87 @@ export default function DiceRollGameScreen({ route }) {
   // Feng (wind) rotation order
   const fengOrder = ['东', '南', '西', '北'];
 
-  // --- useEffect: Initial Setup / Round Reset for Dice Roll ---
+  // Fetch profile images
+  useEffect(() => {
+    const fetchProfileImages = async () => {
+      console.log('🔄 Fetching profile images for DiceRollGameScreen...');
+      console.log('📋 Players to fetch:', allPlayers.map(p => ({ name: p.name, id: p.id })));
+      
+      const updatedPlayers = await Promise.all(
+        allPlayers.map(async (player) => {
+          try {
+            console.log(`\n🔍 Fetching profile for ${player.name} (ID: ${player.id})`);
+            
+            const userDocRef = doc(db, 'users', player.id);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log(`📋 ${player.name}: User data found`);
+              console.log(`📋 ${player.name}: Profile image exists:`, !!userData.profileImage);
+              
+              let profileImage = userData.profileImage;
+              
+              if (profileImage) {
+                console.log(`📋 ${player.name}: Profile image length:`, profileImage.length);
+                console.log(`📋 ${player.name}: Profile image starts with:`, profileImage.substring(0, 30));
+                
+                if (!profileImage.startsWith('data:')) {
+                  profileImage = `data:image/jpeg;base64,${profileImage}`;
+                  console.log(`✅ ${player.name}: Added data URI prefix`);
+                }
+                
+                console.log(`✅ ${player.name}: Profile image ready`);
+                return { ...player, profileImage, profileImageLoaded: true };
+              } else {
+                console.log(`❌ ${player.name}: No profile image in user data`);
+                return { ...player, profileImage: null, profileImageLoaded: true };
+              }
+            } else {
+              console.log(`❌ ${player.name}: No user document found`);
+              return { ...player, profileImage: null, profileImageLoaded: true };
+            }
+          } catch (error) {
+            console.error(`❌ ${player.name}: Error fetching profile:`, error);
+            return { ...player, profileImage: null, profileImageLoaded: true };
+          }
+        })
+      );
+
+      console.log('🎯 Profile images fetched, updating state...');
+      console.log('📊 Results:', updatedPlayers.map(p => ({ 
+        name: p.name, 
+        hasProfileImage: !!p.profileImage,
+        profileImageLoaded: p.profileImageLoaded 
+      })));
+      
+      setAllPlayers(updatedPlayers);
+      
+      // Update banker if needed
+      if (currentBanker) {
+        const updatedBanker = updatedPlayers.find(p => p.id === currentBanker.id);
+        if (updatedBanker) {
+          console.log(`🔄 Updating banker ${currentBanker.name} with profile image:`, !!updatedBanker.profileImage);
+          setCurrentBanker(updatedBanker);
+        }
+      }
+      
+      // Update distributor if needed
+      if (currentDistributor) {
+        const updatedDistributor = updatedPlayers.find(p => p.id === currentDistributor.id);
+        if (updatedDistributor) {
+          console.log(`🔄 Updating distributor ${currentDistributor.name} with profile image:`, !!updatedDistributor.profileImage);
+          setCurrentDistributor(updatedDistributor);
+        }
+      }
+    };
+
+    if (allPlayers.length > 0) {
+      fetchProfileImages();
+    }
+  }, [allPlayers.length]);
+
+  // Initial message setup
   useEffect(() => {
     if (currentBanker) {
       setMessage(`${currentBanker.name}'s turn to roll for tile distribution!`);
@@ -92,18 +169,47 @@ export default function DiceRollGameScreen({ route }) {
     } else {
       setMessage('No banker assigned. Please start a new game.');
     }
-  }, [currentBanker, roundNumber]); // Re-run when banker or round changes
+  }, [currentBanker?.name, roundNumber]);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('=== DiceRollGameScreen Debug Info ===');
-    console.log('Current banker:', currentBanker);
-    console.log('All players:', allPlayers);
-    console.log('Wind cycle count:', windCycleCount);
-    console.log('Current feng:', fengOrder[windCycleCount]);
-    console.log('Players who were banker in current wind:', Array.from(playersWhoWereBankerInCurrentWind));
-    console.log('=====================================');
-  }, [currentBanker, allPlayers, windCycleCount, playersWhoWereBankerInCurrentWind]);
+  // Avatar component
+  const Avatar = ({ player, style }) => {
+    console.log(`🖼️ Avatar render for ${player.name}:`, {
+      profileImageLoaded: player.profileImageLoaded,
+      hasProfileImage: !!player.profileImage,
+      profileImagePreview: player.profileImage ? player.profileImage.substring(0, 50) + '...' : 'null'
+    });
+
+    if (!player.profileImageLoaded) {
+      return (
+        <View style={[style, styles.avatarPlaceholder]}>
+          <ActivityIndicator size="small" color="#004d00" />
+        </View>
+      );
+    }
+
+    if (player.profileImage) {
+      return (
+        <Image
+          source={{ uri: player.profileImage }}
+          style={style}
+          onLoad={() => {
+            console.log(`✅ Avatar loaded successfully for ${player.name}`);
+          }}
+          onError={(error) => {
+            console.error(`❌ Avatar load error for ${player.name}:`, error.nativeEvent);
+          }}
+        />
+      );
+    }
+
+    console.log(`🔄 Using default avatar for ${player.name}`);
+    return (
+      <Image
+        source={require('../assets/images/boy1.png')}
+        style={style}
+      />
+    );
+  };
 
   // Utility function to set message
   const showMessage = useCallback((msg, type = 'info') => {
@@ -114,7 +220,7 @@ export default function DiceRollGameScreen({ route }) {
   // Function to roll a single die (1-6)
   const rollDie = () => Math.floor(Math.random() * 6) + 1;
 
-  // Handle banker's dice roll for tile distribution
+  // Handle banker's dice roll
   const handleBankerRoll = useCallback(() => {
     if (!currentBanker || bankerHasRolled) {
       showMessage("It's not the banker's turn to roll, or they've already rolled!", 'error');
@@ -130,17 +236,14 @@ export default function DiceRollGameScreen({ route }) {
     setBankerHasRolled(true);
     showMessage(`${currentBanker.name} rolled a ${totalRoll}!`, 'success');
 
-    // Determine distributor based on banker's roll
+    // Determine distributor
     const sortedAllPlayers = [...allPlayers].sort((a, b) => a.originalIndex - b.originalIndex);
     const bankerActualIndex = sortedAllPlayers.findIndex(p => p.id === currentBanker.id);
 
     let distributorCalculatedIndex = 0;
     if (bankerActualIndex !== -1) {
-        // Count clockwise from the banker based on the roll value
         distributorCalculatedIndex = (bankerActualIndex + totalRoll - 1) % sortedAllPlayers.length;
     } else {
-        // Fallback if banker not found (shouldn't happen with proper flow)
-        console.warn("Banker not found for distributor calculation, defaulting to first player based on roll.");
         distributorCalculatedIndex = (totalRoll - 1) % sortedAllPlayers.length;
     }
 
@@ -148,11 +251,10 @@ export default function DiceRollGameScreen({ route }) {
     setCurrentDistributor(newDistributor);
 
     setIsLoading(false);
-    setIsDistributorModalVisible(true); // Show the distributor announcement modal
-
+    setIsDistributorModalVisible(true);
   }, [currentBanker, bankerHasRolled, allPlayers, showMessage]);
 
-  // Loading state UI
+  // Loading state
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -162,7 +264,7 @@ export default function DiceRollGameScreen({ route }) {
     );
   }
 
-  // Error state if no players or banker
+  // Error state
   if (allPlayers.length === 0 || !currentBanker) {
     return (
       <View style={styles.loadingContainer}>
@@ -186,7 +288,7 @@ export default function DiceRollGameScreen({ route }) {
           style={styles.headerLogo}
           resizeMode="contain"
         />
-        <View style={styles.headerButton} /> {/* Placeholder for alignment */}
+        <View style={styles.headerButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
@@ -197,10 +299,7 @@ export default function DiceRollGameScreen({ route }) {
           {/* Display Current Banker */}
           {currentBanker && (
             <View style={[styles.playerCard, styles.bankerCardHighlight]}>
-              <Image
-                source={require('../assets/images/boy1.png')}
-                style={styles.playerAvatar}
-              />
+              <Avatar player={currentBanker} style={styles.playerAvatar} />
               <View style={styles.playerInfo}>
                 <Text style={styles.playerCardName}>{currentBanker.name}</Text>
                 <Text style={styles.bankerLabelText}>Current Banker</Text>
@@ -212,10 +311,7 @@ export default function DiceRollGameScreen({ route }) {
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={[
-                    styles.rollButton,
-                    bankerHasRolled && styles.disabledButton
-                  ]}
+                  style={[styles.rollButton, bankerHasRolled && styles.disabledButton]}
                   onPress={handleBankerRoll}
                   disabled={bankerHasRolled}
                 >
@@ -231,24 +327,21 @@ export default function DiceRollGameScreen({ route }) {
               <Text style={styles.messageText}>{message}</Text>
             </View>
           ) : null}
-
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation Bar */}
+      {/* Bottom Navigation */}
       <View style={styles.bottomNavBar}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>🏠</Text>
           </View>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>🔍</Text>
           </View>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItem} onPress={() => console.log('Profile pressed')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>👤</Text>
@@ -256,7 +349,7 @@ export default function DiceRollGameScreen({ route }) {
         </TouchableOpacity>
       </View>
 
-      {/* Distributor Announcement Modal */}
+      {/* Distributor Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -269,7 +362,7 @@ export default function DiceRollGameScreen({ route }) {
 
             {currentDistributor && (
               <View style={styles.modalPlayerInfo}>
-                <Image source={require('../assets/images/boy1.png')} style={styles.modalAvatar} />
+                <Avatar player={currentDistributor} style={styles.modalAvatar} />
                 <View style={styles.modalPlayerDetails}>
                   <Text style={styles.modalPlayerName}>{currentDistributor.name}</Text>
                   <Text style={styles.modalDistributorText}>
@@ -285,18 +378,18 @@ export default function DiceRollGameScreen({ route }) {
               onPress={() => {
                 setIsDistributorModalVisible(false);
                 navigation.navigate('ChipCounting', {
-                  players: allPlayers, // Pass all players with their current chip counts
-                  banker: currentBanker, // The determined banker for the next round
-                  distributor: currentDistributor, // The determined distributor for the next round
-                  roundNumber: roundNumber, // Pass the current round number
-                  gameWindDirection: windDirection, // Pass the updated wind direction
-                  gameSeatWind: seatWind, // Pass the updated seat wind
-                  bankerWinsCount: bankerWinsCount, // Pass the updated banker wins count
-                  allPlayersOrdered: allPlayers, // Pass the consistent ordered list of all players
-                  lastRoundBankerWon: initialLastRoundBankerWon, // Pass this back to ChipCounting for next round logic
-                  windCycleCount: windCycleCount, // Pass current wind cycle
-                  playersWhoWereBankerInCurrentWind: playersWhoWereBankerInCurrentWind, // Pass wind tracking
-                  allPlayers: allPlayers // Also pass as allPlayers for consistency
+                  players: allPlayers,
+                  banker: currentBanker,
+                  distributor: currentDistributor,
+                  roundNumber: roundNumber,
+                  gameWindDirection: windDirection,
+                  gameSeatWind: seatWind,
+                  bankerWinsCount: bankerWinsCount,
+                  allPlayersOrdered: allPlayers,
+                  lastRoundBankerWon: initialLastRoundBankerWon,
+                  windCycleCount: windCycleCount,
+                  playersWhoWereBankerInCurrentWind: playersWhoWereBankerInCurrentWind,
+                  allPlayers: allPlayers
                 });
               }}
             >
@@ -409,6 +502,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#004d00',
   },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
   playerInfo: {
     flex: 1,
   },
@@ -481,21 +579,6 @@ const styles = StyleSheet.create({
     borderColor: '#dc3545',
     borderWidth: 1,
   },
-  progressContainer: {
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: '#e6ffe6',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#004d00',
-    width: '100%',
-  },
-  progressText: {
-    color: '#004d00',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   primaryButton: {
     backgroundColor: '#F8B100',
     paddingVertical: 14,
@@ -547,7 +630,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#666',
   },
-  // Modal styles for Distributor Announcement
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',

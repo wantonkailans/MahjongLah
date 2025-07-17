@@ -1,5 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Image, Text, ScrollView, Alert, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { 
+  View, 
+  Image, 
+  Text, 
+  ScrollView, 
+  Alert, 
+  ActivityIndicator, 
+  TouchableOpacity, 
+  StyleSheet,
+  Platform,
+  StatusBar,
+  SafeAreaView
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';  
@@ -11,8 +23,6 @@ export default function MahjongAnalyzer() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [serverStatus, setServerStatus] = useState('Checking...');
-  ;
-
 
   const BACKEND_URL = 'https://mahjonglah-backend.onrender.com';
 
@@ -198,17 +208,22 @@ export default function MahjongAnalyzer() {
   };
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-
-    {/* Back Button */}
-      <View style={styles.backButtonContainer}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+    <SafeAreaView style={styles.container}>
+      {/* Header copied from DiceRollGameScreen */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
           <Text style={styles.headerIcon}>←</Text>
         </TouchableOpacity>
+        <Image
+          source={require('../assets/images/mahjonglah!.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+        <View style={styles.headerButton} />
       </View>
-   
-    {/*Header Card */}
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Header Card */}
         <View style={styles.headerCard}>
           <Text style={styles.title}>🀄 Mahjong Hand Analyzer</Text>
           <Text style={styles.subtitle}>Analyze your tiles with AI assistance</Text>
@@ -286,44 +301,281 @@ export default function MahjongAnalyzer() {
           </View>
         )}
       </ScrollView>
-    </View>
+
+      {/* Bottom Navigation Bar from DiceRollGameScreen */}
+      <View style={styles.bottomNavBar}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🏠</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Search pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🔍</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Profile pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>👤</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#004d00' },
-  scrollContent: { paddingVertical: 20, paddingHorizontal: 16 },
-  headerCard: { backgroundColor: 'white', borderRadius: 16, padding: 24, marginBottom: 16, alignItems: 'center', elevation: 5 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#004d00', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#666', textAlign: 'center' },
-  statusCard: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 16, elevation: 5 },
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statusLeft: { flexDirection: 'row', alignItems: 'center' },
-  statusIndicator: { width: 24, height: 24, borderRadius: 12, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
-  statusIcon: { color: 'white', fontSize: 12, fontWeight: 'bold' },
-  statusText: { fontSize: 16, color: '#333', fontWeight: '500' },
-  refreshButton: { backgroundColor: '#f0f0f0', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  refreshButtonText: { fontSize: 14, color: '#004d00', fontWeight: '500' },
-  actionCard: { backgroundColor: 'white', borderRadius: 16, padding: 24, marginBottom: 16, elevation: 5 },
-  cardTitle: { fontSize: 20, fontWeight: 'bold', color: '#004d00', marginBottom: 8 },
-  cardDescription: { fontSize: 14, color: '#666', marginBottom: 20, lineHeight: 20 },
-  selectButton: { backgroundColor: '#004d00', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, alignItems: 'center' },
-  selectButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  imageCard: { backgroundColor: 'white', borderRadius: 16, padding: 24, marginBottom: 16, elevation: 5 },
-  imageContainer: { alignItems: 'center', marginBottom: 20 },
-  image: { width: '100%', height: 200, borderRadius: 12, resizeMode: 'contain', backgroundColor: '#f8f8f8' },
-  buttonRow: { flexDirection: 'row', gap: 12 },
-  primaryButton: { backgroundColor: '#004d00', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center', flex: 1 },
-  secondaryButton: { backgroundColor: '#FF6B35', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center', flex: 1 },
-  disabledButton: { backgroundColor: '#ccc', opacity: 0.6 },
-  buttonText: { color: 'white', fontSize: 14, fontWeight: '600' },
-  loadingCard: { backgroundColor: 'white', borderRadius: 16, padding: 32, marginBottom: 16, alignItems: 'center', elevation: 5 },
-  loadingTitle: { fontSize: 18, fontWeight: '600', color: '#004d00', marginTop: 16, marginBottom: 8 },
-  loadingSubtext: { fontSize: 14, color: '#666', textAlign: 'center' },
-  resultCard: { backgroundColor: 'white', borderRadius: 16, padding: 24, marginBottom: 16, elevation: 5 },
-  resultContainer: { backgroundColor: '#f8f8f8', borderRadius: 12, padding: 16, maxHeight: 300 },
-  resultScrollView: { maxHeight: 280 },
-  resultText: { fontSize: 14, color: '#333', lineHeight: 20 },
-  backButtonContainer: { paddingHorizontal: 12, paddingBottom: 8,},
+  container: { 
+    flex: 1, 
+    backgroundColor: '#004d00' 
+  },
+  
+  // Header styles from DiceRollGameScreen
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50,
+    paddingBottom: 10,
+  },
+  headerButton: {
+    padding: 5,
+  },
+  headerIcon: {
+    fontSize: 24,
+    color: '#fff',
+  },
+  headerLogo: {
+    width: 120,
+    height: 40,
+    resizeMode: 'contain',
+  },
 
+  // Bottom Navigation styles from DiceRollGameScreen
+  bottomNavBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 15,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  navIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTextIcon: {
+    fontSize: 24,
+    color: '#666',
+  },
+
+  // Existing styles with updated scrollContent padding
+  scrollContent: { 
+    paddingVertical: 20, 
+    paddingHorizontal: 16,
+    paddingBottom: 100, // Add padding to account for bottom nav
+  },
+  headerCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 24, 
+    marginBottom: 16, 
+    alignItems: 'center', 
+    elevation: 5 
+  },
+  title: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    color: '#004d00', 
+    marginBottom: 8,
+    textAlign: 'center'
+  },
+  subtitle: { 
+    fontSize: 16, 
+    color: '#666', 
+    textAlign: 'center' 
+  },
+  statusCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 20, 
+    marginBottom: 16, 
+    elevation: 5 
+  },
+  statusRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
+  },
+  statusLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  statusIndicator: { 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    marginRight: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  statusIcon: { 
+    color: 'white', 
+    fontSize: 12, 
+    fontWeight: 'bold' 
+  },
+  statusText: { 
+    fontSize: 16, 
+    color: '#333', 
+    fontWeight: '500' 
+  },
+  refreshButton: { 
+    backgroundColor: '#f0f0f0', 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 20 
+  },
+  refreshButtonText: { 
+    fontSize: 14, 
+    color: '#004d00', 
+    fontWeight: '500' 
+  },
+  actionCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 24, 
+    marginBottom: 16, 
+    elevation: 5 
+  },
+  cardTitle: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: '#004d00', 
+    marginBottom: 8 
+  },
+  cardDescription: { 
+    fontSize: 14, 
+    color: '#666', 
+    marginBottom: 20, 
+    lineHeight: 20 
+  },
+  selectButton: { 
+    backgroundColor: '#004d00', 
+    paddingVertical: 16, 
+    paddingHorizontal: 24, 
+    borderRadius: 12, 
+    alignItems: 'center' 
+  },
+  selectButtonText: { 
+    color: 'white', 
+    fontSize: 16, 
+    fontWeight: '600' 
+  },
+  imageCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 24, 
+    marginBottom: 16, 
+    elevation: 5 
+  },
+  imageContainer: { 
+    alignItems: 'center', 
+    marginBottom: 20 
+  },
+  image: { 
+    width: '100%', 
+    height: 200, 
+    borderRadius: 12, 
+    resizeMode: 'contain', 
+    backgroundColor: '#f8f8f8' 
+  },
+  buttonRow: { 
+    flexDirection: 'row', 
+    gap: 12 
+  },
+  primaryButton: { 
+    backgroundColor: '#004d00', 
+    paddingVertical: 16, 
+    paddingHorizontal: 20, 
+    borderRadius: 12, 
+    alignItems: 'center', 
+    flex: 1 
+  },
+  secondaryButton: { 
+    backgroundColor: '#FF6B35', 
+    paddingVertical: 16, 
+    paddingHorizontal: 20, 
+    borderRadius: 12, 
+    alignItems: 'center', 
+    flex: 1 
+  },
+  disabledButton: { 
+    backgroundColor: '#ccc', 
+    opacity: 0.6 
+  },
+  buttonText: { 
+    color: 'white', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
+  loadingCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 32, 
+    marginBottom: 16, 
+    alignItems: 'center', 
+    elevation: 5 
+  },
+  loadingTitle: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#004d00', 
+    marginTop: 16, 
+    marginBottom: 8 
+  },
+  loadingSubtext: { 
+    fontSize: 14, 
+    color: '#666', 
+    textAlign: 'center' 
+  },
+  resultCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 24, 
+    marginBottom: 16, 
+    elevation: 5 
+  },
+  resultContainer: { 
+    backgroundColor: '#f8f8f8', 
+    borderRadius: 12, 
+    padding: 16, 
+    maxHeight: 300 
+  },
+  resultScrollView: { 
+    maxHeight: 280 
+  },
+  resultText: { 
+    fontSize: 14, 
+    color: '#333', 
+    lineHeight: 20 
+  },
 });

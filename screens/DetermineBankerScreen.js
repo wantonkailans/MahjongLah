@@ -13,6 +13,8 @@ import {
   SafeAreaView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function DetermineBankerScreen({ route }) {
   const navigation = useNavigation();
@@ -28,20 +30,22 @@ export default function DetermineBankerScreen({ route }) {
         name: player.name || player.displayName || player.username || `Player ${index + 1}`,
         chips: player.chips !== undefined ? player.chips : 1000,
         originalIndex: player.originalIndex !== undefined ? player.originalIndex : index,
+        profileImage: null,
+        profileImageLoaded: false
       }));
     } else {
       // Fallback for initial load if no players are passed (e.g., direct navigation during development)
       return [
-        { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0 },
-        { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1 },
-        { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2 },
-        { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3 },
+        { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0, profileImage: null, profileImageLoaded: false },
+        { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1, profileImage: null, profileImageLoaded: false },
+        { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2, profileImage: null, profileImageLoaded: false },
+        { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3, profileImage: null, profileImageLoaded: false },
       ];
     }
   });
 
   // State for the banker determination dice rolling phase
-  const [activePlayers, setActivePlayers] = useState([...allPlayers]); // All players participate initially
+  const [activePlayers, setActivePlayers] = useState([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [playerRolls, setPlayerRolls] = useState({}); // Stores { playerId: { value, playerName } }
   const [message, setMessage] = useState('');
@@ -52,14 +56,128 @@ export default function DetermineBankerScreen({ route }) {
   // Modal state for banker announcement
   const [isBankerAnnouncementModalVisible, setIsBankerAnnouncementModalVisible] = useState(false);
 
+  // Fetch profile images
+  useEffect(() => {
+    const fetchProfileImages = async () => {
+      console.log('🔄 Fetching profile images for DetermineBankerScreen...');
+      console.log('📋 Players to fetch:', allPlayers.map(p => ({ name: p.name, id: p.id })));
+      
+      const updatedPlayers = await Promise.all(
+        allPlayers.map(async (player) => {
+          try {
+            console.log(`\n🔍 Fetching profile for ${player.name} (ID: ${player.id})`);
+            
+            const userDocRef = doc(db, 'users', player.id);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log(`📋 ${player.name}: User data found`);
+              console.log(`📋 ${player.name}: Profile image exists:`, !!userData.profileImage);
+              
+              let profileImage = userData.profileImage;
+              
+              if (profileImage) {
+                console.log(`📋 ${player.name}: Profile image length:`, profileImage.length);
+                console.log(`📋 ${player.name}: Profile image starts with:`, profileImage.substring(0, 30));
+                
+                if (!profileImage.startsWith('data:')) {
+                  profileImage = `data:image/jpeg;base64,${profileImage}`;
+                  console.log(`✅ ${player.name}: Added data URI prefix`);
+                }
+                
+                console.log(`✅ ${player.name}: Profile image ready`);
+                return { ...player, profileImage, profileImageLoaded: true };
+              } else {
+                console.log(`❌ ${player.name}: No profile image in user data`);
+                return { ...player, profileImage: null, profileImageLoaded: true };
+              }
+            } else {
+              console.log(`❌ ${player.name}: No user document found`);
+              return { ...player, profileImage: null, profileImageLoaded: true };
+            }
+          } catch (error) {
+            console.error(`❌ ${player.name}: Error fetching profile:`, error);
+            return { ...player, profileImage: null, profileImageLoaded: true };
+          }
+        })
+      );
+
+      console.log('🎯 Profile images fetched, updating state...');
+      console.log('📊 Results:', updatedPlayers.map(p => ({ 
+        name: p.name, 
+        hasProfileImage: !!p.profileImage,
+        profileImageLoaded: p.profileImageLoaded 
+      })));
+      
+      setAllPlayers(updatedPlayers);
+      setActivePlayers([...updatedPlayers]);
+      
+      // Update determined banker if needed
+      if (determinedBanker) {
+        const updatedBanker = updatedPlayers.find(p => p.id === determinedBanker.id);
+        if (updatedBanker) {
+          console.log(`🔄 Updating determined banker ${determinedBanker.name} with profile image:`, !!updatedBanker.profileImage);
+          setDeterminedBanker(updatedBanker);
+        }
+      }
+    };
+
+    if (allPlayers.length > 0) {
+      fetchProfileImages();
+    }
+  }, [allPlayers.length]);
+
   // --- useEffect: Initial Setup for Dice Roll ---
   useEffect(() => {
-    if (allPlayers.length > 0) {
+    if (allPlayers.length > 0 && allPlayers[0].profileImageLoaded) {
       setMessage(`${allPlayers[0].name}'s turn to roll to determine the Banker!`);
+    } else if (allPlayers.length > 0) {
+      setMessage('Loading player profiles...');
     } else {
       setMessage('No players found. Please go back to Start Game screen.');
     }
   }, [allPlayers]);
+
+  // Avatar component (same as DiceRollGameScreen)
+  const Avatar = ({ player, style }) => {
+    console.log(`🖼️ Avatar render for ${player.name}:`, {
+      profileImageLoaded: player.profileImageLoaded,
+      hasProfileImage: !!player.profileImage,
+      profileImagePreview: player.profileImage ? player.profileImage.substring(0, 50) + '...' : 'null'
+    });
+
+    if (!player.profileImageLoaded) {
+      return (
+        <View style={[style, styles.avatarPlaceholder]}>
+          <ActivityIndicator size="small" color="#004d00" />
+        </View>
+      );
+    }
+
+    if (player.profileImage) {
+      return (
+        <Image
+          source={{ uri: player.profileImage }}
+          style={style}
+          onLoad={() => {
+            console.log(`✅ Avatar loaded successfully for ${player.name}`);
+          }}
+          onError={(error) => {
+            console.error(`❌ Avatar load error for ${player.name}:`, error.nativeEvent);
+          }}
+        />
+      );
+    }
+
+    console.log(`🔄 Using default avatar for ${player.name}`);
+    return (
+      <Image
+        source={require('../assets/images/boy1.png')}
+        style={style}
+      />
+    );
+  };
 
   // Utility function to set message
   const showMessage = useCallback((msg, type = 'info') => {
@@ -225,10 +343,7 @@ export default function DetermineBankerScreen({ route }) {
                   canRoll && styles.currentPlayerCard,
                 ]}
               >
-                <Image
-                  source={require('../assets/images/boy1.png')}
-                  style={styles.playerAvatar}
-                />
+                <Avatar player={player} style={styles.playerAvatar} />
                 <View style={styles.playerInfo}>
                   <Text style={styles.playerCardName}>{player.name}</Text>
                 </View>
@@ -305,7 +420,7 @@ export default function DetermineBankerScreen({ route }) {
 
             {determinedBanker && (
               <View style={styles.bankerInfoBox}>
-                <Image source={require('../assets/images/boy1.png')} style={styles.modalAvatar} />
+                <Avatar player={determinedBanker} style={styles.modalAvatar} />
                 <View style={styles.bankerDetails}>
                   <Text style={styles.modalPlayerName}>{determinedBanker.name}</Text>
                   <Text style={styles.bankerRoleText}>is the Banker!</Text>
@@ -318,10 +433,7 @@ export default function DetermineBankerScreen({ route }) {
             <View style={styles.mahjongTableLayout}>
               {allPlayers.map((player, index) => (
                 <View key={player.id} style={styles.tablePlayerCard}>
-                  <Image
-                    source={require('../assets/images/boy1.png')}
-                    style={styles.tablePlayerAvatar}
-                  />
+                  <Avatar player={player} style={styles.tablePlayerAvatar} />
                   <Text style={styles.tablePlayerName}>{player.name}</Text>
                 </View>
               ))}
@@ -332,7 +444,7 @@ export default function DetermineBankerScreen({ route }) {
               onPress={() => {
                 setIsBankerAnnouncementModalVisible(false);
                 navigation.navigate('DiceRollGame', {
-                  players: allPlayers, // Pass all players with initial chips
+                  players: allPlayers, // Pass all players with profile images
                   banker: determinedBanker, // The determined initial banker
                   distributor: null, // Distributor will be determined on next screen
                   roundNumber: 1, // Starting round
@@ -471,6 +583,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
     borderWidth: 2,
     borderColor: '#004d00',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
   playerInfo: {
     flex: 1,

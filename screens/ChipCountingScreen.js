@@ -13,9 +13,12 @@ import {
     KeyboardAvoidingView,
     TouchableWithoutFeedback,
     Keyboard,
-    Modal // Re-added Modal for custom alerts
+    Modal,
+    ActivityIndicator
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function ChipCountingScreen({ route }) {
     const navigation = useNavigation();
@@ -49,15 +52,17 @@ export default function ChipCountingScreen({ route }) {
         if (playersToUse && playersToUse.length > 0) {
             return playersToUse.map(p => ({
                 ...p,
-                chips: p.chips !== undefined ? p.chips : 1000 // Preserve existing chips or default
+                chips: p.chips !== undefined ? p.chips : 1000, // Preserve existing chips or default
+                profileImage: p.profileImage || null,
+                profileImageLoaded: p.profileImageLoaded || false
             }));
         } else {
             // Fallback players
             return [
-                { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0 },
-                { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1 },
-                { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2 },
-                { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3 },
+                { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0, profileImage: null, profileImageLoaded: false },
+                { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1, profileImage: null, profileImageLoaded: false },
+                { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2, profileImage: null, profileImageLoaded: false },
+                { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3, profileImage: null, profileImageLoaded: false },
             ];
         }
     });
@@ -83,7 +88,14 @@ export default function ChipCountingScreen({ route }) {
     const [currentFeng, setCurrentFeng] = useState('东');
 
     // Current banker (updated based on game logic)
-    const [currentBanker, setCurrentBanker] = useState(banker); // Initialize with banker from previous screen
+    const [currentBanker, setCurrentBanker] = useState(() => {
+        if (banker) {
+            // Find the banker in the players array to get their profile image
+            const bankerFromPlayers = players.find(p => p.id === banker.id);
+            return bankerFromPlayers || banker;
+        }
+        return banker;
+    });
 
     // Full list of players in their original order, used for clockwise rotation
     const [allPlayersInOrder, setAllPlayersInOrder] = useState(() => {
@@ -93,18 +105,103 @@ export default function ChipCountingScreen({ route }) {
         if (playersToUse && playersToUse.length > 0) {
             return playersToUse.map(p => ({
                 ...p,
-                chips: p.chips !== undefined ? p.chips : 1000 // Preserve existing chips
+                chips: p.chips !== undefined ? p.chips : 1000, // Preserve existing chips
+                profileImage: p.profileImage || null,
+                profileImageLoaded: p.profileImageLoaded || false
             }));
         } else {
             // Fallback players
             return [
-                { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0 },
-                { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1 },
-                { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2 },
-                { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3 },
+                { id: 'player1', name: 'Audrey', chips: 1000, originalIndex: 0, profileImage: null, profileImageLoaded: false },
+                { id: 'player2', name: 'Wanton', chips: 1000, originalIndex: 1, profileImage: null, profileImageLoaded: false },
+                { id: 'player3', name: 'Aud', chips: 1000, originalIndex: 2, profileImage: null, profileImageLoaded: false },
+                { id: 'player4', name: 'Audreyng', chips: 1000, originalIndex: 3, profileImage: null, profileImageLoaded: false },
             ];
         }
     });
+
+    // Fetch profile images
+    useEffect(() => {
+        const fetchProfileImages = async () => {
+            console.log('🔄 Fetching profile images for ChipCountingScreen...');
+            console.log('📋 Players to fetch:', players.map(p => ({ name: p.name, id: p.id })));
+            
+            const updatedPlayers = await Promise.all(
+                players.map(async (player) => {
+                    // Skip if already loaded
+                    if (player.profileImageLoaded) {
+                        return player;
+                    }
+                    
+                    try {
+                        console.log(`\n🔍 Fetching profile for ${player.name} (ID: ${player.id})`);
+                        
+                        const userDocRef = doc(db, 'users', player.id);
+                        const userDoc = await getDoc(userDocRef);
+                        
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            console.log(`📋 ${player.name}: User data found`);
+                            console.log(`📋 ${player.name}: Profile image exists:`, !!userData.profileImage);
+                            
+                            let profileImage = userData.profileImage;
+                            
+                            if (profileImage) {
+                                console.log(`📋 ${player.name}: Profile image length:`, profileImage.length);
+                                console.log(`📋 ${player.name}: Profile image starts with:`, profileImage.substring(0, 30));
+                                
+                                if (!profileImage.startsWith('data:')) {
+                                    profileImage = `data:image/jpeg;base64,${profileImage}`;
+                                    console.log(`✅ ${player.name}: Added data URI prefix`);
+                                }
+                                
+                                console.log(`✅ ${player.name}: Profile image ready`);
+                                return { ...player, profileImage, profileImageLoaded: true };
+                            } else {
+                                console.log(`❌ ${player.name}: No profile image in user data`);
+                                return { ...player, profileImage: null, profileImageLoaded: true };
+                            }
+                        } else {
+                            console.log(`❌ ${player.name}: No user document found`);
+                            return { ...player, profileImage: null, profileImageLoaded: true };
+                        }
+                    } catch (error) {
+                        console.error(`❌ ${player.name}: Error fetching profile:`, error);
+                        return { ...player, profileImage: null, profileImageLoaded: true };
+                    }
+                })
+            );
+
+            console.log('🎯 Profile images fetched, updating state...');
+            console.log('📊 Results:', updatedPlayers.map(p => ({ 
+                name: p.name, 
+                hasProfileImage: !!p.profileImage,
+                profileImageLoaded: p.profileImageLoaded 
+            })));
+            
+            setPlayers(updatedPlayers);
+            
+            // Update allPlayersInOrder
+            const updatedAllPlayers = allPlayersInOrder.map(orderPlayer => {
+                const updatedPlayer = updatedPlayers.find(p => p.id === orderPlayer.id);
+                return updatedPlayer || orderPlayer;
+            });
+            setAllPlayersInOrder(updatedAllPlayers);
+            
+            // Update current banker if needed
+            if (currentBanker) {
+                const updatedBanker = updatedPlayers.find(p => p.id === currentBanker.id);
+                if (updatedBanker) {
+                    console.log(`🔄 Updating current banker ${currentBanker.name} with profile image:`, !!updatedBanker.profileImage);
+                    setCurrentBanker(updatedBanker);
+                }
+            }
+        };
+
+        if (players.length > 0 && !players.every(p => p.profileImageLoaded)) {
+            fetchProfileImages();
+        }
+    }, [players.length]);
 
     // Initialize current banker if exists and add to banker tracking
     useEffect(() => {
@@ -139,6 +236,46 @@ export default function ChipCountingScreen({ route }) {
 
     // Feng (wind) rotation order
     const fengOrder = ['东', '南', '西', '北'];
+
+    // Avatar component (same as other screens)
+    const Avatar = ({ player, style }) => {
+        console.log(`🖼️ Avatar render for ${player.name}:`, {
+            profileImageLoaded: player.profileImageLoaded,
+            hasProfileImage: !!player.profileImage,
+            profileImagePreview: player.profileImage ? player.profileImage.substring(0, 50) + '...' : 'null'
+        });
+
+        if (!player.profileImageLoaded) {
+            return (
+                <View style={[style, styles.avatarPlaceholder]}>
+                    <ActivityIndicator size="small" color="#004d00" />
+                </View>
+            );
+        }
+
+        if (player.profileImage) {
+            return (
+                <Image
+                    source={{ uri: player.profileImage }}
+                    style={style}
+                    onLoad={() => {
+                        console.log(`✅ Avatar loaded successfully for ${player.name}`);
+                    }}
+                    onError={(error) => {
+                        console.error(`❌ Avatar load error for ${player.name}:`, error.nativeEvent);
+                    }}
+                />
+            );
+        }
+
+        console.log(`🔄 Using default avatar for ${player.name}`);
+        return (
+            <Image
+                source={require('../assets/images/boy1.png')}
+                style={style}
+            />
+        );
+    };
 
     // --- useEffect: Update currentFeng when windCycleCount changes ---
     useEffect(() => {
@@ -380,10 +517,7 @@ export default function ChipCountingScreen({ route }) {
                                                 currentBanker && player.id === currentBanker.id && styles.bankerChipCard
                                             ]}
                                         >
-                                            <Image
-                                                source={require('../assets/images/boy1.png')}
-                                                style={styles.playerChipAvatar}
-                                            />
+                                            <Avatar player={player} style={styles.playerChipAvatar} />
                                             <Text style={styles.playerChipName}>
                                                 {player.name}
                                             </Text>
@@ -504,10 +638,7 @@ export default function ChipCountingScreen({ route }) {
                                         <View style={styles.rankContainer}>
                                             <Text style={styles.rankText}>#{index + 1}</Text>
                                         </View>
-                                        <Image
-                                            source={require('../assets/images/boy1.png')}
-                                            style={styles.finalScoreAvatar}
-                                        />
+                                        <Avatar player={player} style={styles.finalScoreAvatar} />
                                         <Text style={styles.finalScoreName}>{player.name}</Text>
                                         <Text style={[
                                             styles.finalScoreChips,
@@ -655,6 +786,11 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         borderWidth: 2,
         borderColor: '#004d00',
+    },
+    avatarPlaceholder: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f0f0f0',
     },
     playerChipName: {
         fontSize: 16,
