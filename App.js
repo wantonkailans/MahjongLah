@@ -24,6 +24,9 @@ import LeaderboardScreen from './screens/LeaderboardScreen.js';
 // Import the NEW MessagingScreen
 import MessagingScreen from './screens/MessagingScreen.js';
 
+// Import the NEW ChatScreen
+import ChatScreen from './screens/ChatScreen.js';
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -44,6 +47,7 @@ export default function App() {
         <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Messaging" component={MessagingScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

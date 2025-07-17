@@ -118,11 +118,13 @@ export default function MessagingScreen() {
       
       setIsLoading(true);
       
-      // Query messages where current user is recipient
+      // Add a small delay to allow index to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Simplified query without orderBy to avoid index requirement
       const messagesQuery = query(
         collection(db, 'messages'),
-        where('recipientId', '==', auth.currentUser.uid),
-        orderBy('timestamp', 'desc')
+        where('recipientId', '==', auth.currentUser.uid)
       );
       
       const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
@@ -162,6 +164,9 @@ export default function MessagingScreen() {
           });
         }
         
+        // Sort messages by timestamp (newest first) - done client-side
+        messagesData.sort((a, b) => b.timestamp - a.timestamp);
+        
         setMessages(messagesData);
         setIsLoading(false);
       });
@@ -192,13 +197,21 @@ export default function MessagingScreen() {
         senderUsername: currentUserData.username || 'user',
         recipientId: selectedFriend.id,
         recipientName: selectedFriend.displayName,
+        recipientUsername: selectedFriend.username,
         message: messageText.trim(),
         timestamp: serverTimestamp(),
         read: false,
         type: 'friend_message'
       };
       
-      await addDoc(collection(db, 'messages'), messageData);
+      // Add to both collections - messages (for inbox) and chats (for conversations)
+      await Promise.all([
+        addDoc(collection(db, 'messages'), messageData),
+        addDoc(collection(db, 'chats'), {
+          ...messageData,
+          type: 'chat_message'
+        })
+      ]);
       
       setMessageText('');
       setSelectedFriend(null);
@@ -305,7 +318,14 @@ export default function MessagingScreen() {
             <TouchableOpacity
               key={message.id}
               style={[styles.messageItem, !message.read && styles.unreadMessage]}
-              onPress={() => markAsRead(message.id)}
+              onPress={() => {
+                markAsRead(message.id);
+                navigation.navigate('Chat', {
+                  friendId: message.senderId,
+                  friendName: message.senderInfo.displayName,
+                  friendUsername: message.senderInfo.username || message.senderUsername || 'user'
+                });
+              }}
             >
               <Avatar user={message.senderInfo} style={styles.messageAvatar} />
               <View style={styles.messageContent}>

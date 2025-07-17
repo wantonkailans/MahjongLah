@@ -11,7 +11,8 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  SafeAreaView
+  SafeAreaView,
+  Modal
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db } from '../firebase';
@@ -27,9 +28,7 @@ import {
   arrayUnion,
   arrayRemove,
   getDoc,
-  writeBatch,
-  setDoc,
-  serverTimestamp
+  writeBatch
 } from 'firebase/firestore';
 
 export default function SearchScreen() {
@@ -41,6 +40,8 @@ export default function SearchScreen() {
   const [popularPlayers, setPopularPlayers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [userFriends, setUserFriends] = useState([]);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
   const searchTimeout = useRef(null);
 
   // Load current user and their friends
@@ -77,7 +78,17 @@ export default function SearchScreen() {
 
   // Avatar component following DiceRollGameScreen pattern
   const Avatar = ({ player, style }) => {
-    console.log(`🖼️ Avatar render for ${player.displayName}:`, {
+    // Handle undefined/null player
+    if (!player) {
+      return (
+        <Image
+          source={require('../assets/images/boy1.png')}
+          style={style}
+        />
+      );
+    }
+
+    console.log(`🖼️ Avatar render for ${player.displayName || player.name || 'Unknown'}:`, {
       profileImageLoaded: player.profileImageLoaded,
       hasProfileImage: !!player.profileImage,
       profileImagePreview: player.profileImage ? player.profileImage.substring(0, 50) + '...' : 'null'
@@ -97,16 +108,16 @@ export default function SearchScreen() {
           source={{ uri: player.profileImage }}
           style={style}
           onLoad={() => {
-            console.log(`✅ Avatar loaded successfully for ${player.displayName}`);
+            console.log(`✅ Avatar loaded successfully for ${player.displayName || player.name || 'Unknown'}`);
           }}
           onError={(error) => {
-            console.error(`❌ Avatar load error for ${player.displayName}:`, error.nativeEvent);
+            console.error(`❌ Avatar load error for ${player.displayName || player.name || 'Unknown'}:`, error.nativeEvent);
           }}
         />
       );
     }
 
-    console.log(`🔄 Using default avatar for ${player.displayName}`);
+    console.log(`🔄 Using default avatar for ${player.displayName || player.name || 'Unknown'}`);
     return (
       <Image
         source={require('../assets/images/boy1.png')}
@@ -400,7 +411,7 @@ export default function SearchScreen() {
     }
   };
 
-  // Enhanced add friend function with notifications
+  // Enhanced add friend function without notifications
   const addFriend = async (friendId, friendName, friendUsername) => {
     try {
       if (!auth.currentUser) {
@@ -466,15 +477,6 @@ export default function SearchScreen() {
 
       await batch.commit();
 
-      // Send notifications to both users
-      await sendFriendNotifications(
-        friendId, 
-        friendData.displayName || friendData.username || 'Anonymous',
-        friendData.username || 'user',
-        currentUserData.displayName || currentUserData.username || 'Anonymous',
-        currentUserData.username || 'user'
-      );
-
       setUserFriends([...userFriends, friendId]);
       Alert.alert('Success', `You are now friends with ${friendName || friendUsername}!`);
       
@@ -531,23 +533,24 @@ export default function SearchScreen() {
     );
   };
 
-  // Enhanced player selection with more options
+  // Enhanced player selection with custom modal
   const handlePlayerSelect = (player) => {
-    const isFriend = userFriends.includes(player.id);
+    if (!player || !player.id) {
+      console.error('Invalid player data:', player);
+      return;
+    }
     
-    Alert.alert(
-      'Player Profile',
-      `${player.displayName}\n@${player.username}\nPoints: ${player.totalPoints || 0}\nGames: ${player.gamesPlayed || 0}\nWin Rate: ${((player.winRate || 0) * 100).toFixed(1)}%${player.isOnline ? '\n🟢 Online' : '\n⚫ Offline'}`,
-      [
-        { text: 'View Profile', onPress: () => handleViewProfile(player) },
-        { text: 'Invite to Game', onPress: () => handleInviteToGame(player) },
-        { 
-          text: isFriend ? 'Remove Friend' : 'Add Friend', 
-          onPress: () => handleAddFriend(player)
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
+    setSelectedPlayer(player);
+    setShowPlayerModal(true);
+  };
+
+  // Handle send message
+  const handleSendMessage = (player) => {
+    navigation.navigate('Chat', {
+      friendId: player.id,
+      friendName: player.displayName,
+      friendUsername: player.username
+    });
   };
 
   // Handle view profile
@@ -591,11 +594,6 @@ export default function SearchScreen() {
           <Text style={styles.playerName}>{player.displayName}</Text>
           <Text style={styles.playerUsername}>@{player.username}</Text>
           <Text style={styles.playerPoints}>Points: {player.totalPoints || 0}</Text>
-          {showStats && (
-            <Text style={styles.playerStats}>
-              Games: {player.gamesPlayed || 0} | Win Rate: {((player.winRate || 0) * 100).toFixed(1)}%
-            </Text>
-          )}
         </View>
         
         <TouchableOpacity 
@@ -727,6 +725,81 @@ export default function SearchScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Custom Player Profile Modal */}
+      {selectedPlayer && showPlayerModal && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showPlayerModal}
+          onRequestClose={() => {
+            setShowPlayerModal(false);
+            setSelectedPlayer(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.playerModalContent}>
+              <View style={styles.playerModalHeader}>
+                <Avatar user={selectedPlayer} style={styles.modalPlayerAvatar} />
+                <View style={styles.modalPlayerInfo}>
+                  <Text style={styles.modalPlayerName}>
+                    {selectedPlayer.displayName || selectedPlayer.name || 'Unknown User'}
+                  </Text>
+                  <Text style={styles.modalPlayerUsername}>
+                    @{selectedPlayer.username || 'unknown'}
+                  </Text>
+                  <Text style={styles.modalPlayerPoints}>
+                    {selectedPlayer.totalPoints || 0} points
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.modalButtonContainer}>
+                <TouchableOpacity
+                  style={styles.modalSendMessageButton}
+                  onPress={() => {
+                    setShowPlayerModal(false);
+                    setSelectedPlayer(null);
+                    handleSendMessage(selectedPlayer);
+                  }}
+                >
+                  <Text style={styles.modalSendMessageButtonText}>Send Message</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.modalAddFriendButton,
+                    userFriends.includes(selectedPlayer.id) && styles.modalRemoveFriendButton
+                  ]}
+                  onPress={() => {
+                    setShowPlayerModal(false);
+                    const playerToProcess = { ...selectedPlayer };
+                    setSelectedPlayer(null);
+                    handleAddFriend(playerToProcess);
+                  }}
+                >
+                  <Text style={[
+                    styles.modalAddFriendButtonText,
+                    userFriends.includes(selectedPlayer.id) && styles.modalRemoveFriendButtonText
+                  ]}>
+                    {userFriends.includes(selectedPlayer.id) ? 'Remove Friend' : 'Add Friend'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setShowPlayerModal(false);
+                  setSelectedPlayer(null);
+                }}
+              >
+                <Text style={styles.modalCloseButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Bottom Navigation - Updated to match DiceRollGameScreen positioning */}
       <View style={styles.bottomNavBar}>
@@ -1016,5 +1089,114 @@ const styles = StyleSheet.create({
   navTextIcon: {
     fontSize: 24,
     color: '#666',
+  },
+  // Custom Player Profile Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playerModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 25,
+    width: '85%',
+    maxWidth: 380,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 15,
+  },
+  playerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  modalPlayerAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 15,
+    borderWidth: 3,
+    borderColor: '#004d00',
+  },
+  modalPlayerInfo: {
+    flex: 1,
+  },
+  modalPlayerName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#004d00',
+    marginBottom: 4,
+  },
+  modalPlayerUsername: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 4,
+  },
+  modalPlayerPoints: {
+    fontSize: 16,
+    color: '#F8B100',
+    fontWeight: '600',
+  },
+  modalButtonContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalSendMessageButton: {
+    backgroundColor: '#004d00',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modalSendMessageButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalAddFriendButton: {
+    backgroundColor: '#F8B100',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modalAddFriendButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalRemoveFriendButton: {
+    backgroundColor: '#dc3545',
+  },
+  modalRemoveFriendButtonText: {
+    color: '#fff',
+  },
+  modalCloseButton: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  modalCloseButtonText: {
+    color: '#6c757d',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
