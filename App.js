@@ -21,7 +21,8 @@ import MahjongAnalyzerScreen from './screens/MahjongAnalyzerScreen';
 import SearchScreen from './screens/SearchScreen.js';
 import LeaderboardScreen from './screens/LeaderboardScreen.js';
 
-// Removed: import CropScreen from './screens/CropScreen.js'; // This line is now gone
+// Import the NEW MessagingScreen
+import MessagingScreen from './screens/MessagingScreen.js';
 
 const Stack = createNativeStackNavigator();
 
@@ -42,7 +43,7 @@ export default function App() {
         <Stack.Screen name="MahjongAnalyzer" component={MahjongAnalyzerScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: false }} />
-        {/* Removed: <Stack.Screen name="Crop" component={CropScreen} options={{ headerShown: false }} /> */}
+        <Stack.Screen name="Messaging" component={MessagingScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

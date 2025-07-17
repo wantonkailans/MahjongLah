@@ -63,48 +63,101 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, []);
 
+  // Load top 3 players for leaderboard preview
   useEffect(() => {
     const fetchTop3 = async () => {
-      const leaderboardQuery = query(
-        collection(db, 'leaderboard'),
-        orderBy('totalScore', 'desc'),
-        limit(3)
-      );
-      const snapshot = await getDocs(leaderboardQuery);
-      const players = snapshot.docs.map((doc, index) => ({
-        id: doc.id,
-        displayName: doc.data().displayName || 'Anonymous',
-        totalScore: doc.data().totalScore || 0,
-        rank: index + 1,
-      }));
-      setTopPlayers(players);
+      try {
+        const leaderboardQuery = query(
+          collection(db, 'leaderboard'),
+          orderBy('totalScore', 'desc'),
+          limit(3)
+        );
+        const snapshot = await getDocs(leaderboardQuery);
+        const players = snapshot.docs.map((doc, index) => ({
+          id: doc.id,
+          displayName: doc.data().displayName || 'Anonymous',
+          totalScore: doc.data().totalScore || 0,
+          rank: index + 1,
+        }));
+        setTopPlayers(players);
+      } catch (error) {
+        console.error('Error fetching top players:', error);
+        // Fallback to dummy data if leaderboard fails
+        setTopPlayers([
+          { id: '1', displayName: 'Elynn Lee', totalScore: 1500, rank: 1 },
+          { id: '2', displayName: 'James Tan', totalScore: 1200, rank: 2 },
+          { id: '3', displayName: 'Elliot Chew', totalScore: 1100, rank: 3 },
+        ]);
+      }
     };
 
     fetchTop3();
   }, []);
 
-  const handleStartNewGame = () => navigation.navigate('StartGame');
-  const handleProfilePress = () => navigation.navigate('Profile');
+  // Handler functions
+  const handleStartNewGame = () => {
+    console.log('Start New Game pressed');
+    navigation.navigate('StartGame');
+  };
+
+  const handleProfilePress = () => {
+    console.log('Profile pressed');
+    navigation.navigate('Profile');
+  };
+
+  const handleSearchPress = () => {
+    console.log('Search pressed');
+    navigation.navigate('Search');
+  };
+
+  const handleLeaderboardPress = () => {
+    console.log('Leaderboard pressed');
+    navigation.navigate('Leaderboard');
+  };
+
+  // FIXED: Changed to navigate to Messaging instead of Search
+  const handleKakiFinderPress = () => {
+    console.log('Mahjong Kaki Finder pressed - navigating to Messaging');
+    navigation.navigate('Messaging');
+  };
 
   return (
     <View style={styles.container}>
       {/* Top Header */}
       <View style={styles.appHeader}>
-        <TouchableOpacity onPress={() => console.log('Menu pressed')}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => console.log('Menu pressed')}>
           <Text style={styles.headerIcon}>☰</Text>
         </TouchableOpacity>
-        <Image source={require('../../assets/images/mahjonglah!.png')} style={styles.headerAppLogo} />
-        <TouchableOpacity onPress={handleProfilePress}>
-          <Image
-            source={profileImage ? { uri: profileImage } : require('../../assets/images/boy1.png')}
-            style={styles.headerProfileAvatar}
-          />
+        <Image 
+          source={require('../../assets/images/mahjonglah!.png')} 
+          style={styles.headerAppLogo} 
+        />
+        <TouchableOpacity style={styles.headerButton} onPress={handleProfilePress}>
+          {profileImage ? (
+            <Image 
+              source={{ uri: profileImage }} 
+              style={styles.headerProfileAvatar}
+              onError={(error) => {
+                console.warn('Error loading header profile image:', error);
+                setProfileImage(null);
+              }}
+            />
+          ) : (
+            <Image 
+              source={require('../../assets/images/boy1.png')} 
+              style={styles.headerProfileAvatar} 
+            />
+          )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false}>
-        {/* Top Row */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollViewContent} 
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Top Row - Two Cards Side by Side */}
         <View style={styles.topRowContainer}>
+          {/* Welcome Card */}
           <View style={styles.welcomeCardSmall}>
             <Text style={styles.greetingTextSmall}>{greeting}</Text>
             <Text style={styles.usernameTextSmall}>{username}!</Text>
@@ -114,8 +167,12 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* Start New Game Card */}
           <TouchableOpacity style={styles.gameCardSmall} onPress={handleStartNewGame}>
-            <Image source={require('../../assets/images/tiles(home).png')} style={styles.cardIconSmall} />
+            <Image 
+              source={require('../../assets/images/tiles(home).png')} 
+              style={styles.cardIconSmall} 
+            />
             <Text style={styles.cardTitleSmall}>Start New Game</Text>
           </TouchableOpacity>
         </View>
@@ -124,7 +181,10 @@ export default function HomeScreen() {
         <View style={styles.card}>
           <View style={styles.leaderboardHeader}>
             <Text style={styles.cardTitle}>NUS Community Leaderboard</Text>
-            <Image source={require('../../assets/images/nus.png')} style={styles.leaderboardLogo} />
+            <Image 
+              source={require('../../assets/images/nus.png')} 
+              style={styles.leaderboardLogo} 
+            />
           </View>
 
           {topPlayers.map((player) => (
@@ -141,8 +201,8 @@ export default function HomeScreen() {
           ))}
 
           <TouchableOpacity
-            onPress={() => navigation.navigate('Leaderboard')}
             style={styles.leaderboardButton}
+            onPress={handleLeaderboardPress}
           >
             <Text style={styles.leaderboardButtonText}>View Full Leaderboard</Text>
           </TouchableOpacity>
@@ -154,7 +214,11 @@ export default function HomeScreen() {
           activeOpacity={0.8}
           style={styles.aiSection}
         >
-          <Image source={require('../../assets/images/robot.png')} style={styles.aiImage} resizeMode="contain" />
+          <Image 
+            source={require('../../assets/images/robot.png')} 
+            style={styles.aiImage} 
+            resizeMode="contain" 
+          />
           <View style={styles.aiTextContainer}>
             <Text style={styles.aiTitle}>Need a hand?</Text>
             <Text style={styles.aiDescription}>
@@ -163,9 +227,9 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Need a Friend Section */}
+        {/* Friend Finder Section - FIXED: Now navigates to Messaging */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('Search')}
+          onPress={handleKakiFinderPress}
           activeOpacity={0.8}
           style={styles.friendSection}
         >
@@ -175,22 +239,30 @@ export default function HomeScreen() {
           <View style={styles.friendTextContainer}>
             <Text style={styles.friendTitle}>Need a friend to play with?</Text>
             <Text style={styles.friendDescription}>
-              Use our Mahjong Kaki Finder to find more friends!
+              Send messages to your friends and find new players to play with!
             </Text>
           </View>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Bottom Navigation */}
+      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
-        <TouchableOpacity onPress={() => console.log('Home pressed')}>
-          <Text style={styles.navTextIcon}>🏠</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Home pressed')}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🏠</Text>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => console.log('Search pressed')}>
-          <Text style={styles.navTextIcon}>🔍</Text>
+        
+        <TouchableOpacity style={styles.navItem} onPress={handleSearchPress}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>🔍</Text>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleProfilePress}>
-          <Text style={styles.navTextIcon}>👤</Text>
+        
+        <TouchableOpacity style={styles.navItem} onPress={handleProfilePress}>
+          <View style={styles.navIconContainer}>
+            <Text style={styles.navTextIcon}>👤</Text>
+          </View>
         </TouchableOpacity>
       </View>
     </View>
@@ -209,6 +281,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50,
     paddingBottom: 10,
+  },
+  headerButton: { 
+    padding: 5 
   },
   headerIcon: {
     fontSize: 24,
@@ -243,6 +318,11 @@ const styles = StyleSheet.create({
     width: '48%',
     padding: 15,
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    position: 'relative',
   },
   greetingTextSmall: {
     fontSize: 12,
@@ -281,6 +361,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   cardIconSmall: {
     width: 50,
@@ -302,6 +386,10 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     alignItems: 'center',
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   leaderboardHeader: {
     flexDirection: 'row',
@@ -326,6 +414,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     width: '100%',
     marginBottom: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   playerInfo: {
     flexDirection: 'row',
@@ -348,16 +439,21 @@ const styles = StyleSheet.create({
     color: '#004d00',
   },
   leaderboardButton: {
-    backgroundColor: '#f9a825',
+    backgroundColor: '#F8B100',
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 25,
     marginTop: 15,
     alignItems: 'center',
     width: '100%',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   leaderboardButtonText: {
-    color: 'white',
+    color: '#000',
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -369,6 +465,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
     marginBottom: 15,
   },
   aiImage: {
@@ -399,18 +499,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   friendIconContainer: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#f0f9f0',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
   },
   friendIcon: {
-    fontSize: 24,
+    fontSize: 30,
   },
   friendTextContainer: {
     flex: 1,
@@ -440,6 +544,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  navIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navTextIcon: {
     fontSize: 24,
