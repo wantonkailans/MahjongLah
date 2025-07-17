@@ -158,7 +158,7 @@ export default function HomeScreen() {
           </View>
 
           <TouchableOpacity style={styles.kakiButton} onPress={() => console.log('Find Kaki pressed')}>
-            <Text style={styles.kakiButtonText}>View Leaderboard</Text>
+            <Text style={styles.kakiButtonText}>View Leaderboard!</Text>
           </TouchableOpacity>
         </View>
 
@@ -177,6 +177,23 @@ export default function HomeScreen() {
             <Text style={styles.aiTitle}>Need a hand?</Text>
             <Text style={styles.aiDescription}>
               Our AI can suggest your next move to maximize your chances of winning!
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Friend Finder Section */}
+        <TouchableOpacity
+          onPress={() => console.log('Mahjong Kaki Finder pressed')}
+          activeOpacity={0.8}
+          style={styles.friendSection}
+        >
+          <View style={styles.friendIconContainer}>
+            <Text style={styles.friendEmoji}>👥</Text>
+          </View>
+          <View style={styles.friendTextContainer}>
+            <Text style={styles.friendTitle}>Need a friend to play with?</Text>
+            <Text style={styles.friendDescription}>
+              Use our Mahjong Kaki Finder to find more friends!
             </Text>
           </View>
         </TouchableOpacity>
@@ -244,11 +261,17 @@ const styles = StyleSheet.create({
   leaderboardEmail: { fontSize: 13, color: '#666' },
   kakiButton: { backgroundColor: '#F8B100', borderRadius: 25, paddingVertical: 15, paddingHorizontal: 20, width: '100%', alignItems: 'center', marginTop: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
   kakiButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-  aiSection: { backgroundColor: '#fff', borderRadius: 20, width: '100%', padding: 20, flexDirection: 'row', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
+  aiSection: { backgroundColor: '#fff', borderRadius: 20, width: '100%', padding: 20, flexDirection: 'row', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, marginBottom: 15 },
   aiImage: { width: 60, height: 60, resizeMode: 'contain', marginRight: 15 },
   aiTextContainer: { flex: 1 },
   aiTitle: { fontSize: 18, fontWeight: 'bold', color: '#000', marginBottom: 5 },
   aiDescription: { fontSize: 14, color: '#666', lineHeight: 20 },
+  friendSection: { backgroundColor: '#fff', borderRadius: 20, width: '100%', padding: 20, flexDirection: 'row', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
+  friendIconContainer: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#f0f9f0', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  friendEmoji: { fontSize: 30 },
+  friendTextContainer: { flex: 1 },
+  friendTitle: { fontSize: 18, fontWeight: 'bold', color: '#000', marginBottom: 5 },
+  friendDescription: { fontSize: 14, color: '#666', lineHeight: 20 },
   bottomNavBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#fff', paddingVertical: 15, paddingBottom: Platform.OS === 'ios' ? 25 : 15, borderTopLeftRadius: 25, borderTopRightRadius: 25, position: 'absolute', bottom: 0, left: 0, right: 0, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.15, shadowRadius: 10 },
   navItem: { flex: 1, alignItems: 'center', paddingVertical: 5 },
   navIconContainer: { alignItems: 'center', justifyContent: 'center' },
