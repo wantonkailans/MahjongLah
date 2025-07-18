@@ -40,10 +40,17 @@ export default function MessagingScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Load friends list
+  // Load current user and friends list
   useEffect(() => {
-    loadFriends();
+    const loadCurrentUser = async () => {
+      if (auth.currentUser) {
+        setCurrentUser(auth.currentUser);
+        await loadFriends();
+      }
+    };
+    loadCurrentUser();
   }, []);
 
   // Load messages when component mounts
@@ -72,7 +79,7 @@ export default function MessagingScreen() {
     );
   };
 
-  // Load user's friends
+  // Load user's friends (only confirmed friends)
   const loadFriends = async () => {
     try {
       if (!auth.currentUser) return;
@@ -99,10 +106,19 @@ export default function MessagingScreen() {
                 displayName: friendData.displayName || friendData.username || 'Anonymous',
                 username: friendData.username || 'user',
                 profileImage: profileImage,
-                isOnline: friendData.isOnline || false
+                isOnline: friendData.isOnline || false,
+                lastActive: friendData.lastActive
               });
             }
           }
+          
+          // Sort friends by online status and then by name
+          friendsData.sort((a, b) => {
+            if (a.isOnline && !b.isOnline) return -1;
+            if (!a.isOnline && b.isOnline) return 1;
+            return a.displayName.localeCompare(b.displayName);
+          });
+          
           setFriends(friendsData);
         }
       }
@@ -111,20 +127,37 @@ export default function MessagingScreen() {
     }
   };
 
-  // Load messages from inbox
+  // Load messages from inbox (only from friends)
   const loadMessages = async () => {
     try {
       if (!auth.currentUser) return;
       
       setIsLoading(true);
       
+      // Get user's friends list first
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (!userDoc.exists()) {
+        setIsLoading(false);
+        return;
+      }
+      
+      const userData = userDoc.data();
+      const friendIds = userData.friends || [];
+      
+      if (friendIds.length === 0) {
+        setMessages([]);
+        setIsLoading(false);
+        return;
+      }
+      
       // Add a small delay to allow index to be ready
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Simplified query without orderBy to avoid index requirement
+      // Only load messages from friends
       const messagesQuery = query(
         collection(db, 'messages'),
-        where('recipientId', '==', auth.currentUser.uid)
+        where('recipientId', '==', auth.currentUser.uid),
+        where('senderId', 'in', friendIds.slice(0, 10)) // Firestore 'in' query limit is 10
       );
       
       const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
@@ -132,6 +165,11 @@ export default function MessagingScreen() {
         
         for (const docSnapshot of snapshot.docs) {
           const messageData = docSnapshot.data();
+          
+          // Double-check sender is actually a friend
+          if (!friendIds.includes(messageData.senderId)) {
+            continue;
+          }
           
           // Get sender information
           const senderDoc = await getDoc(doc(db, 'users', messageData.senderId));
@@ -175,10 +213,64 @@ export default function MessagingScreen() {
     } catch (error) {
       console.error('Error loading messages:', error);
       setIsLoading(false);
+      
+      // Fallback: load messages without real-time updates
+      try {
+        const messagesQuery = query(
+          collection(db, 'messages'),
+          where('recipientId', '==', auth.currentUser.uid)
+        );
+        const snapshot = await getDocs(messagesQuery);
+        
+        const messagesData = [];
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        const friendIds = userDoc.exists() ? (userDoc.data().friends || []) : [];
+        
+        for (const docSnapshot of snapshot.docs) {
+          const messageData = docSnapshot.data();
+          
+          // Only include messages from friends
+          if (friendIds.includes(messageData.senderId)) {
+            const senderDoc = await getDoc(doc(db, 'users', messageData.senderId));
+            let senderInfo = {
+              displayName: 'Unknown User',
+              username: 'unknown',
+              profileImage: null
+            };
+            
+            if (senderDoc.exists()) {
+              const senderData = senderDoc.data();
+              let profileImage = senderData.profileImage;
+              
+              if (profileImage && !profileImage.startsWith('data:')) {
+                profileImage = `data:image/jpeg;base64,${profileImage}`;
+              }
+              
+              senderInfo = {
+                displayName: senderData.displayName || senderData.username || 'Anonymous',
+                username: senderData.username || 'user',
+                profileImage: profileImage
+              };
+            }
+            
+            messagesData.push({
+              id: docSnapshot.id,
+              ...messageData,
+              senderInfo: senderInfo,
+              timestamp: messageData.timestamp?.toDate() || new Date()
+            });
+          }
+        }
+        
+        messagesData.sort((a, b) => b.timestamp - a.timestamp);
+        setMessages(messagesData);
+      } catch (fallbackError) {
+        console.error('Fallback message loading failed:', fallbackError);
+      }
     }
   };
 
-  // Send message
+  // Send message (only to friends)
   const sendMessage = async () => {
     if (!messageText.trim() || !selectedFriend) {
       Alert.alert('Error', 'Please select a friend and enter a message');
@@ -188,8 +280,22 @@ export default function MessagingScreen() {
     try {
       setIsSending(true);
       
-      const currentUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const currentUserData = currentUserDoc.data();
+      // Double-check that the selected friend is actually a friend
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (!userDoc.exists()) {
+        Alert.alert('Error', 'User data not found');
+        return;
+      }
+      
+      const userData = userDoc.data();
+      const friendIds = userData.friends || [];
+      
+      if (!friendIds.includes(selectedFriend.id)) {
+        Alert.alert('Error', 'You can only send messages to friends');
+        return;
+      }
+      
+      const currentUserData = userData;
       
       const messageData = {
         senderId: auth.currentUser.uid,
@@ -253,7 +359,7 @@ export default function MessagingScreen() {
     }
   };
 
-  // Render friend selection modal
+  // Render friend selection modal (only confirmed friends)
   const renderFriendModal = () => (
     <Modal
       animationType="slide"
@@ -265,25 +371,42 @@ export default function MessagingScreen() {
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Select Friend</Text>
           
-          <ScrollView style={styles.friendsList}>
-            {friends.map(friend => (
+          {friends.length === 0 ? (
+            <View style={styles.emptyFriendsContainer}>
+              <Text style={styles.emptyFriendsIcon}>👥</Text>
+              <Text style={styles.emptyFriendsText}>No friends yet</Text>
+              <Text style={styles.emptyFriendsSubtext}>Add friends to start messaging</Text>
               <TouchableOpacity
-                key={friend.id}
-                style={styles.friendItem}
+                style={styles.findFriendsButton}
                 onPress={() => {
-                  setSelectedFriend(friend);
                   setShowFriendModal(false);
+                  navigation.navigate('Search');
                 }}
               >
-                <Avatar user={friend} style={styles.friendAvatar} />
-                <View style={styles.friendInfo}>
-                  <Text style={styles.friendName}>{friend.displayName}</Text>
-                  <Text style={styles.friendUsername}>@{friend.username}</Text>
-                </View>
-                {friend.isOnline && <View style={styles.onlineIndicator} />}
+                <Text style={styles.findFriendsButtonText}>Find Friends</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </View>
+          ) : (
+            <ScrollView style={styles.friendsList}>
+              {friends.map(friend => (
+                <TouchableOpacity
+                  key={friend.id}
+                  style={styles.friendItem}
+                  onPress={() => {
+                    setSelectedFriend(friend);
+                    setShowFriendModal(false);
+                  }}
+                >
+                  <Avatar user={friend} style={styles.friendAvatar} />
+                  <View style={styles.friendInfo}>
+                    <Text style={styles.friendName}>{friend.displayName}</Text>
+                    <Text style={styles.friendUsername}>@{friend.username}</Text>
+                  </View>
+                  {friend.isOnline && <View style={styles.onlineIndicator} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
           
           <TouchableOpacity
             style={styles.closeButton}
@@ -300,6 +423,7 @@ export default function MessagingScreen() {
   const renderInbox = () => (
     <View style={styles.tabContent}>
       <Text style={styles.tabTitle}>Your Messages</Text>
+      <Text style={styles.tabSubtitle}>Only messages from friends are shown</Text>
       
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -311,6 +435,12 @@ export default function MessagingScreen() {
           <Text style={styles.emptyIcon}>📬</Text>
           <Text style={styles.emptyText}>No messages yet</Text>
           <Text style={styles.emptySubtext}>Messages from friends will appear here</Text>
+          <TouchableOpacity
+            style={styles.findFriendsButton}
+            onPress={() => navigation.navigate('Search')}
+          >
+            <Text style={styles.findFriendsButtonText}>Find Friends</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={styles.messagesList}>
@@ -333,7 +463,7 @@ export default function MessagingScreen() {
                   <Text style={styles.messageSender}>{message.senderInfo.displayName}</Text>
                   <Text style={styles.messageTime}>{formatTimestamp(message.timestamp)}</Text>
                 </View>
-                <Text style={styles.messageText}>{message.message}</Text>
+                <Text style={styles.messageText} numberOfLines={2}>{message.message}</Text>
                 {!message.read && <View style={styles.unreadDot} />}
               </View>
             </TouchableOpacity>
@@ -347,6 +477,7 @@ export default function MessagingScreen() {
   const renderCompose = () => (
     <View style={styles.tabContent}>
       <Text style={styles.tabTitle}>Send Message</Text>
+      <Text style={styles.tabSubtitle}>You can only message friends</Text>
       
       {friends.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -354,10 +485,10 @@ export default function MessagingScreen() {
           <Text style={styles.emptyText}>No friends yet</Text>
           <Text style={styles.emptySubtext}>Add friends to send messages</Text>
           <TouchableOpacity
-            style={styles.addFriendsButton}
-            onPress={() => navigation.navigate('SearchScreen')}
+            style={styles.findFriendsButton}
+            onPress={() => navigation.navigate('Search')}
           >
-            <Text style={styles.addFriendsButtonText}>Find Friends</Text>
+            <Text style={styles.findFriendsButtonText}>Find Friends</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -393,6 +524,26 @@ export default function MessagingScreen() {
               <Text style={styles.sendButtonText}>Send Message</Text>
             )}
           </TouchableOpacity>
+          
+          <View style={styles.friendsListContainer}>
+            <Text style={styles.friendsListTitle}>Your Friends ({friends.length})</Text>
+            <ScrollView style={styles.friendsListScroll} showsVerticalScrollIndicator={false}>
+              {friends.map(friend => (
+                <TouchableOpacity
+                  key={friend.id}
+                  style={styles.friendQuickItem}
+                  onPress={() => setSelectedFriend(friend)}
+                >
+                  <Avatar user={friend} style={styles.friendQuickAvatar} />
+                  <View style={styles.friendQuickInfo}>
+                    <Text style={styles.friendQuickName}>{friend.displayName}</Text>
+                    <Text style={styles.friendQuickUsername}>@{friend.username}</Text>
+                  </View>
+                  {friend.isOnline && <View style={styles.onlineIndicator} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         </View>
       )}
     </View>
@@ -446,7 +597,7 @@ export default function MessagingScreen() {
             <Text style={styles.navTextIcon}>🏠</Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SearchScreen')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Search')}>
           <View style={styles.navIconContainer}>
             <Text style={styles.navTextIcon}>🔍</Text>
           </View>
@@ -527,7 +678,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: 5,
+  },
+  tabSubtitle: {
+    fontSize: 14,
+    color: '#ccc',
     marginBottom: 20,
+    fontStyle: 'italic',
   },
   loadingContainer: {
     flex: 1,
@@ -561,13 +718,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  addFriendsButton: {
+  findFriendsButton: {
     backgroundColor: '#F8B100',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 10,
   },
-  addFriendsButtonText: {
+  findFriendsButtonText: {
     color: '#000',
     fontSize: 16,
     fontWeight: 'bold',
@@ -662,6 +819,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 15,
     alignItems: 'center',
+    marginBottom: 20,
   },
   disabledButton: {
     backgroundColor: '#ccc',
@@ -671,6 +829,47 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  friendsListContainer: {
+    flex: 1,
+  },
+  friendsListTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 10,
+  },
+  friendsListScroll: {
+    flex: 1,
+    maxHeight: 200,
+  },
+  friendQuickItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 5,
+  },
+  friendQuickAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#004d00',
+  },
+  friendQuickInfo: {
+    flex: 1,
+  },
+  friendQuickName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  friendQuickUsername: {
+    fontSize: 12,
+    color: '#666',
   },
   modalOverlay: {
     flex: 1,
@@ -691,6 +890,26 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  emptyFriendsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyFriendsIcon: {
+    fontSize: 48,
+    marginBottom: 20,
+  },
+  emptyFriendsText: {
+    fontSize: 18,
+    color: '#333',
+    marginBottom: 5,
+    fontWeight: '600',
+  },
+  emptyFriendsSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
   },
   friendsList: {
     maxHeight: 400,

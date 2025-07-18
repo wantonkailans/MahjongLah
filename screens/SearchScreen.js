@@ -28,7 +28,10 @@ import {
   arrayUnion,
   arrayRemove,
   getDoc,
-  writeBatch
+  writeBatch,
+  addDoc,
+  serverTimestamp,
+  setDoc
 } from 'firebase/firestore';
 
 export default function SearchScreen() {
@@ -40,8 +43,12 @@ export default function SearchScreen() {
   const [popularPlayers, setPopularPlayers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [userFriends, setUserFriends] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [receivedRequests, setReceivedRequests] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
+  const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [activeRequestTab, setActiveRequestTab] = useState('received'); // 'received' or 'sent'
   const searchTimeout = useRef(null);
 
   // Load current user and their friends
@@ -50,6 +57,7 @@ export default function SearchScreen() {
       if (auth.currentUser) {
         setCurrentUser(auth.currentUser);
         await loadUserFriends();
+        await loadFriendRequests();
       }
     };
     loadCurrentUser();
@@ -67,6 +75,66 @@ export default function SearchScreen() {
       }
     } catch (error) {
       console.error('Error loading user friends:', error);
+    }
+  };
+
+  // Load friend requests
+  const loadFriendRequests = async () => {
+    try {
+      if (!auth.currentUser) return;
+      
+      // Load sent requests
+      const sentQuery = query(
+        collection(db, 'friendRequests'),
+        where('senderId', '==', auth.currentUser.uid),
+        where('status', '==', 'pending')
+      );
+      const sentSnapshot = await getDocs(sentQuery);
+      const sentRequestsData = sentSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setSentRequests(sentRequestsData);
+
+      // Load received requests
+      const receivedQuery = query(
+        collection(db, 'friendRequests'),
+        where('recipientId', '==', auth.currentUser.uid),
+        where('status', '==', 'pending')
+      );
+      const receivedSnapshot = await getDocs(receivedQuery);
+      const receivedRequestsData = [];
+      
+      for (const docSnap of receivedSnapshot.docs) {
+        const requestData = docSnap.data();
+        
+        // Get sender information
+        const senderDoc = await getDoc(doc(db, 'users', requestData.senderId));
+        if (senderDoc.exists()) {
+          const senderData = senderDoc.data();
+          let profileImage = senderData.profileImage;
+          
+          if (profileImage && !profileImage.startsWith('data:')) {
+            profileImage = `data:image/jpeg;base64,${profileImage}`;
+          }
+          
+          receivedRequestsData.push({
+            id: docSnap.id,
+            ...requestData,
+            senderInfo: {
+              id: requestData.senderId,
+              displayName: senderData.displayName || senderData.username || 'Anonymous',
+              username: senderData.username || 'user',
+              profileImage: profileImage,
+              profileImageLoaded: true
+            }
+          });
+        }
+      }
+      
+      setReceivedRequests(receivedRequestsData);
+    } catch (error) {
+      console.error('Error loading friend requests:', error);
     }
   };
 
@@ -382,68 +450,90 @@ export default function SearchScreen() {
     }
   };
 
-  // Function to send friend notification to both users
-  const sendFriendNotifications = async (friendId, friendName, friendUsername, currentUserName, currentUserUsername) => {
-    try {
-      const timestamp = new Date().toISOString();
-      
-      // Only send notification to the friend (person being added)
-      // Remove the current user notification to avoid permission issues
-      const friendNotificationId = `friend_${auth.currentUser.uid}_${friendId}_${Date.now()}`;
-      await setDoc(doc(db, 'notifications', friendNotificationId), {
-        id: friendNotificationId,
-        type: 'friend_added',
-        recipientId: friendId,
-        senderId: auth.currentUser.uid,
-        senderName: currentUserName,
-        senderUsername: currentUserUsername,
-        title: 'New Friend Added!',
-        message: `${currentUserName} (@${currentUserUsername}) added you as a friend!`,
-        timestamp: serverTimestamp(),
-        read: false,
-        createdAt: timestamp
-      });
-      
-      console.log(`📧 Friend notification sent to ${friendName}`);
-    } catch (error) {
-      console.error('Error sending friend notifications:', error);
-      // Don't throw error - friendship still works without notifications
-    }
-  };
-
-  // Enhanced add friend function without notifications
-  const addFriend = async (friendId, friendName, friendUsername) => {
+  // Send friend request
+  const sendFriendRequest = async (recipientId, recipientName, recipientUsername) => {
     try {
       if (!auth.currentUser) {
-        Alert.alert('Error', 'Please login to add friends');
+        Alert.alert('Error', 'Please login to send friend requests');
         return;
       }
 
-      if (userFriends.includes(friendId)) {
-        Alert.alert('Info', `You are already friends with ${friendName || friendUsername}`);
+      if (userFriends.includes(recipientId)) {
+        Alert.alert('Info', `You are already friends with ${recipientName || recipientUsername}`);
         return;
       }
 
-      if (friendId === auth.currentUser.uid) {
-        Alert.alert('Error', 'You cannot add yourself as a friend');
+      if (recipientId === auth.currentUser.uid) {
+        Alert.alert('Error', 'You cannot send a friend request to yourself');
+        return;
+      }
+
+      // Check if request already exists
+      const existingRequestQuery = query(
+        collection(db, 'friendRequests'),
+        where('senderId', '==', auth.currentUser.uid),
+        where('recipientId', '==', recipientId),
+        where('status', '==', 'pending')
+      );
+      const existingSnapshot = await getDocs(existingRequestQuery);
+      
+      if (!existingSnapshot.empty) {
+        Alert.alert('Info', 'Friend request already sent');
         return;
       }
 
       const currentUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
       const currentUserData = currentUserDoc.data();
 
-      const friendDoc = await getDoc(doc(db, 'users', friendId));
-      const friendData = friendDoc.data();
+      // Create friend request document
+      const friendRequestData = {
+        senderId: auth.currentUser.uid,
+        senderName: currentUserData.displayName || currentUserData.username || 'Anonymous',
+        senderUsername: currentUserData.username || 'user',
+        recipientId: recipientId,
+        recipientName: recipientName || recipientUsername,
+        recipientUsername: recipientUsername || 'user',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
 
-      if (!friendDoc.exists()) {
+      await addDoc(collection(db, 'friendRequests'), friendRequestData);
+
+      // Update local state
+      setSentRequests([...sentRequests, { ...friendRequestData, id: 'temp_' + Date.now() }]);
+
+      Alert.alert('Success', `Friend request sent to ${recipientName || recipientUsername}!`);
+      
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      Alert.alert('Error', 'Failed to send friend request. Please try again.');
+    }
+  };
+
+  // Accept friend request
+  const acceptFriendRequest = async (requestId, senderId, senderName, senderUsername) => {
+    try {
+      if (!auth.currentUser) {
+        Alert.alert('Error', 'Please login to accept friend requests');
+        return;
+      }
+
+      const currentUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const currentUserData = currentUserDoc.data();
+
+      const senderDoc = await getDoc(doc(db, 'users', senderId));
+      const senderData = senderDoc.data();
+
+      if (!senderDoc.exists()) {
         Alert.alert('Error', 'User not found');
         return;
       }
 
-      // Create friendship document in friendships collection
-      const friendshipId = [auth.currentUser.uid, friendId].sort().join('_');
+      // Create friendship document
+      const friendshipId = [auth.currentUser.uid, senderId].sort().join('_');
       const friendshipData = {
-        users: [auth.currentUser.uid, friendId],
+        users: [auth.currentUser.uid, senderId],
         user1: {
           id: auth.currentUser.uid,
           displayName: currentUserData.displayName || currentUserData.username || 'Anonymous',
@@ -451,12 +541,12 @@ export default function SearchScreen() {
           avatar: currentUserData.avatar || null
         },
         user2: {
-          id: friendId,
-          displayName: friendData.displayName || friendData.username || 'Anonymous',
-          username: friendData.username || 'No username',
-          avatar: friendData.avatar || null
+          id: senderId,
+          displayName: senderData.displayName || senderData.username || 'Anonymous',
+          username: senderData.username || 'No username',
+          avatar: senderData.avatar || null
         },
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
         status: 'active'
       };
 
@@ -465,24 +555,69 @@ export default function SearchScreen() {
       // Add friendship document
       batch.set(doc(db, 'friendships', friendshipId), friendshipData);
       
-      // Update current user's friends array
+      // Update both users' friends arrays
       batch.update(doc(db, 'users', auth.currentUser.uid), {
-        friends: arrayUnion(friendId)
+        friends: arrayUnion(senderId)
+      });
+      batch.update(doc(db, 'users', senderId), {
+        friends: arrayUnion(auth.currentUser.uid)
       });
 
-      // Update friend's friends array
-      batch.update(doc(db, 'users', friendId), {
-        friends: arrayUnion(auth.currentUser.uid)
+      // Update friend request status
+      batch.update(doc(db, 'friendRequests', requestId), {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
       });
 
       await batch.commit();
 
-      setUserFriends([...userFriends, friendId]);
-      Alert.alert('Success', `You are now friends with ${friendName || friendUsername}!`);
+      // Update local state
+      setUserFriends([...userFriends, senderId]);
+      setReceivedRequests(receivedRequests.filter(req => req.id !== requestId));
+
+      Alert.alert('Success', `You are now friends with ${senderName}!`);
       
     } catch (error) {
-      console.error('Error adding friend:', error);
-      Alert.alert('Error', 'Failed to add friend. Please try again.');
+      console.error('Error accepting friend request:', error);
+      Alert.alert('Error', 'Failed to accept friend request. Please try again.');
+    }
+  };
+
+  // Decline friend request
+  const declineFriendRequest = async (requestId, senderName) => {
+    try {
+      await updateDoc(doc(db, 'friendRequests', requestId), {
+        status: 'declined',
+        updatedAt: serverTimestamp()
+      });
+
+      // Update local state
+      setReceivedRequests(receivedRequests.filter(req => req.id !== requestId));
+
+      Alert.alert('Success', `Friend request from ${senderName} declined`);
+      
+    } catch (error) {
+      console.error('Error declining friend request:', error);
+      Alert.alert('Error', 'Failed to decline friend request. Please try again.');
+    }
+  };
+
+  // Cancel sent friend request
+  const cancelFriendRequest = async (requestId, recipientName) => {
+    try {
+      await updateDoc(doc(db, 'friendRequests', requestId), {
+        status: 'cancelled',
+        updatedAt: serverTimestamp()
+      });
+
+      // Update local state
+      setSentRequests(sentRequests.filter(req => req.id !== requestId));
+
+      Alert.alert('Success', `Friend request to ${recipientName} cancelled`);
+      
+    } catch (error) {
+      console.error('Error cancelling friend request:', error);
+      Alert.alert('Error', 'Failed to cancel friend request. Please try again.');
     }
   };
 
@@ -544,8 +679,13 @@ export default function SearchScreen() {
     setShowPlayerModal(true);
   };
 
-  // Handle send message
+  // Handle send message (only for friends)
   const handleSendMessage = (player) => {
+    if (!userFriends.includes(player.id)) {
+      Alert.alert('Error', 'You can only send messages to friends');
+      return;
+    }
+    
     navigation.navigate('Chat', {
       friendId: player.id,
       friendName: player.displayName,
@@ -553,30 +693,34 @@ export default function SearchScreen() {
     });
   };
 
-  // Handle view profile
-  const handleViewProfile = (player) => {
-    console.log('View profile:', player.id);
-  };
-
-  // Handle invite to game
-  const handleInviteToGame = (player) => {
-    console.log('Invite to game:', player.id);
-  };
-
   // Handle add/remove friend button press
   const handleAddFriend = (player) => {
     const isFriend = userFriends.includes(player.id);
+    const hasSentRequest = sentRequests.some(req => req.recipientId === player.id);
     
     if (isFriend) {
       removeFriend(player.id, player.displayName, player.username);
+    } else if (hasSentRequest) {
+      Alert.alert('Info', 'Friend request already sent');
     } else {
-      addFriend(player.id, player.displayName, player.username);
+      sendFriendRequest(player.id, player.displayName, player.username);
+    }
+  };
+
+  // Get button status for player
+  const getButtonStatus = (player) => {
+    if (userFriends.includes(player.id)) {
+      return { text: '✓', color: '#28a745', type: 'friend' };
+    } else if (sentRequests.some(req => req.recipientId === player.id)) {
+      return { text: '⏳', color: '#ffc107', type: 'pending' };
+    } else {
+      return { text: '+', color: '#004d00', type: 'add' };
     }
   };
 
   // Render player item with enhanced UI and Avatar component
   const renderPlayerItem = (player, showStats = false) => {
-    const isFriend = userFriends.includes(player.id);
+    const buttonStatus = getButtonStatus(player);
     
     return (
       <TouchableOpacity 
@@ -597,17 +741,116 @@ export default function SearchScreen() {
         </View>
         
         <TouchableOpacity 
-          style={[styles.addButton, isFriend && styles.friendButton]} 
+          style={[styles.addButton, { backgroundColor: buttonStatus.color }]} 
           onPress={() => handleAddFriend(player)}
           activeOpacity={0.8}
         >
-          <Text style={[styles.addButtonText, isFriend && styles.friendButtonText]}>
-            {isFriend ? '✓' : '+'}
+          <Text style={styles.addButtonText}>
+            {buttonStatus.text}
           </Text>
         </TouchableOpacity>
       </TouchableOpacity>
     );
   };
+
+  // Render friend requests modal
+  const renderFriendRequestsModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showRequestsModal}
+      onRequestClose={() => setShowRequestsModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.requestsModalContent}>
+          <Text style={styles.modalTitle}>Friend Requests</Text>
+          
+          {/* Tab Navigation */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[styles.tab, activeRequestTab === 'received' && styles.activeTab]}
+              onPress={() => setActiveRequestTab('received')}
+            >
+              <Text style={[styles.tabText, activeRequestTab === 'received' && styles.activeTabText]}>
+                Received ({receivedRequests.length})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeRequestTab === 'sent' && styles.activeTab]}
+              onPress={() => setActiveRequestTab('sent')}
+            >
+              <Text style={[styles.tabText, activeRequestTab === 'sent' && styles.activeTabText]}>
+                Sent ({sentRequests.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.requestsList}>
+            {activeRequestTab === 'received' ? (
+              receivedRequests.length === 0 ? (
+                <View style={styles.emptyRequestsContainer}>
+                  <Text style={styles.emptyRequestsText}>No friend requests</Text>
+                </View>
+              ) : (
+                receivedRequests.map(request => (
+                  <View key={request.id} style={styles.requestItem}>
+                    <Avatar player={request.senderInfo} style={styles.requestAvatar} />
+                    <View style={styles.requestInfo}>
+                      <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
+                      <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
+                    </View>
+                    <View style={styles.requestActions}>
+                      <TouchableOpacity
+                        style={styles.acceptButton}
+                        onPress={() => acceptFriendRequest(request.id, request.senderId, request.senderInfo.displayName, request.senderInfo.username)}
+                      >
+                        <Text style={styles.acceptButtonText}>Accept</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.declineButton}
+                        onPress={() => declineFriendRequest(request.id, request.senderInfo.displayName)}
+                      >
+                        <Text style={styles.declineButtonText}>Decline</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )
+            ) : (
+              sentRequests.length === 0 ? (
+                <View style={styles.emptyRequestsContainer}>
+                  <Text style={styles.emptyRequestsText}>No pending requests</Text>
+                </View>
+              ) : (
+                sentRequests.map(request => (
+                  <View key={request.id} style={styles.requestItem}>
+                    <View style={styles.requestInfo}>
+                      <Text style={styles.requestName}>{request.recipientName}</Text>
+                      <Text style={styles.requestUsername}>@{request.recipientUsername}</Text>
+                      <Text style={styles.requestStatus}>Pending...</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={() => cancelFriendRequest(request.id, request.recipientName)}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )
+            )}
+          </ScrollView>
+          
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setShowRequestsModal(false)}
+          >
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -740,7 +983,7 @@ export default function SearchScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.playerModalContent}>
               <View style={styles.playerModalHeader}>
-                <Avatar user={selectedPlayer} style={styles.modalPlayerAvatar} />
+                <Avatar player={selectedPlayer} style={styles.modalPlayerAvatar} />
                 <View style={styles.modalPlayerInfo}>
                   <Text style={styles.modalPlayerName}>
                     {selectedPlayer.displayName || selectedPlayer.name || 'Unknown User'}
@@ -755,16 +998,18 @@ export default function SearchScreen() {
               </View>
               
               <View style={styles.modalButtonContainer}>
-                <TouchableOpacity
-                  style={styles.modalSendMessageButton}
-                  onPress={() => {
-                    setShowPlayerModal(false);
-                    setSelectedPlayer(null);
-                    handleSendMessage(selectedPlayer);
-                  }}
-                >
-                  <Text style={styles.modalSendMessageButtonText}>Send Message</Text>
-                </TouchableOpacity>
+                {userFriends.includes(selectedPlayer.id) && (
+                  <TouchableOpacity
+                    style={styles.modalSendMessageButton}
+                    onPress={() => {
+                      setShowPlayerModal(false);
+                      setSelectedPlayer(null);
+                      handleSendMessage(selectedPlayer);
+                    }}
+                  >
+                    <Text style={styles.modalSendMessageButtonText}>Send Message</Text>
+                  </TouchableOpacity>
+                )}
                 
                 <TouchableOpacity
                   style={[
@@ -782,7 +1027,8 @@ export default function SearchScreen() {
                     styles.modalAddFriendButtonText,
                     userFriends.includes(selectedPlayer.id) && styles.modalRemoveFriendButtonText
                   ]}>
-                    {userFriends.includes(selectedPlayer.id) ? 'Remove Friend' : 'Add Friend'}
+                    {userFriends.includes(selectedPlayer.id) ? 'Remove Friend' : 
+                     sentRequests.some(req => req.recipientId === selectedPlayer.id) ? 'Request Sent' : 'Send Friend Request'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -799,6 +1045,23 @@ export default function SearchScreen() {
             </View>
           </View>
         </Modal>
+      )}
+
+      {/* Friend Requests Modal */}
+      {renderFriendRequestsModal()}
+
+      {/* Floating Requests Button */}
+      {receivedRequests.length > 0 && (
+        <TouchableOpacity
+          style={styles.floatingRequestsButton}
+          onPress={() => setShowRequestsModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.floatingRequestsIcon}>👥</Text>
+          <View style={styles.requestsBadge}>
+            <Text style={styles.requestsBadgeText}>{receivedRequests.length}</Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       {/* Bottom Navigation - Updated to match DiceRollGameScreen positioning */}
@@ -848,7 +1111,8 @@ const styles = StyleSheet.create({
   headerRight: {
     flex: 1,
     alignItems: 'flex-end',
-    paddingRight: 15,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   headerButton: {
     padding: 5,
@@ -859,9 +1123,61 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#fff',
   },
+  requestsTextButton: {
+    paddingHorizontal: 5,
+    paddingVertical: 5,
+    marginRight: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestsText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  // Floating Requests Button
+  floatingRequestsButton: {
+    position: 'absolute',
+    bottom: 110, // Above the navigation bar
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F8B100',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  floatingRequestsIcon: {
+    fontSize: 24,
+    color: '#000',
+  },
+  requestsBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#dc3545',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  requestsBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   headerLogo: {
-    width: 120,
-    height: 40,
+    width: 100,
+    height: 35,
     resizeMode: 'contain',
   },
   headerTitle: {
@@ -1007,17 +1323,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  friendButton: {
-    backgroundColor: '#28a745',
-  },
   addButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  friendButtonText: {
-    color: '#fff',
-    fontSize: 16,
   },
   noResultsContainer: {
     alignItems: 'center',
@@ -1195,6 +1504,150 @@ const styles = StyleSheet.create({
     borderColor: '#e9ecef',
   },
   modalCloseButtonText: {
+    color: '#6c757d',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  // Friend Requests Modal Styles
+  requestsModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 25,
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 15,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#004d00',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    marginBottom: 20,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#F8B100',
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  activeTabText: {
+    color: '#004d00',
+    fontWeight: '600',
+  },
+  requestsList: {
+    maxHeight: 400,
+  },
+  requestItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  requestAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 15,
+    borderWidth: 2,
+    borderColor: '#004d00',
+  },
+  requestInfo: {
+    flex: 1,
+  },
+  requestName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  requestUsername: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  requestStatus: {
+    fontSize: 12,
+    color: '#ffc107',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  acceptButton: {
+    backgroundColor: '#28a745',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+  },
+  acceptButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  declineButton: {
+    backgroundColor: '#dc3545',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+  },
+  declineButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  cancelButton: {
+    backgroundColor: '#6c757d',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  emptyRequestsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyRequestsText: {
+    fontSize: 16,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  closeButton: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    marginTop: 20,
+  },
+  closeButtonText: {
     color: '#6c757d',
     fontSize: 16,
     fontWeight: '500',

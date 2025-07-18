@@ -45,6 +45,34 @@
           {
             "podName": "FirebaseAuthInterop",
             "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseAuth",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseCore",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseCoreInternal",
+            "modularHeaders": true
+          },
+          {
+            "podName": "GoogleUtilities",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseAppCheckInterop",
+            "modularHeaders": true
+          },
+          {
+            "podName": "RecaptchaInterop",
+            "modularHeaders": true
+          },
+          {
+            "podName": "FirebaseAuthInterop",
+            "modularHeaders": true
           }
         ]
       }
@@ -65,6 +93,10 @@
         "projectId": "84f1ca6f-64ab-412f-8b68-ac9ce8ab6b1b"
       }
     },
-    "owner": "ztinaxz"
+    "owner": "ztinaxz",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/84f1ca6f-64ab-412f-8b68-ac9ce8ab6b1b"
+    }
   }
 }
