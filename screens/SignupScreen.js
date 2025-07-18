@@ -231,10 +231,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 150,
-    height: 50,
+    width: 250,
+    height: 200,
     resizeMode: 'contain',
-    marginBottom: 20,
+    marginBottom: 0,
   },
   title: {
     fontWeight: 'bold',
