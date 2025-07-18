@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db } from '../../firebase';
@@ -22,12 +23,21 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
+interface TopPlayer {
+  id: string;
+  displayName: string;
+  totalScore: number;
+  rank: number;
+  profileImage?: string | null;
+  profileImageLoaded?: boolean;
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   const [username, setUsername] = useState('Loading...');
   const [greeting, setGreeting] = useState('Hello');
-  const [profileImage, setProfileImage] = useState(null);
-  const [topPlayers, setTopPlayers] = useState([]);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [topPlayers, setTopPlayers] = useState<TopPlayer[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -67,32 +77,128 @@ export default function HomeScreen() {
   useEffect(() => {
     const fetchTop3 = async () => {
       try {
+        console.log('🔄 Loading top 3 players for home screen...');
+        
         const leaderboardQuery = query(
           collection(db, 'leaderboard'),
           orderBy('totalScore', 'desc'),
           limit(3)
         );
         const snapshot = await getDocs(leaderboardQuery);
-        const players = snapshot.docs.map((doc, index) => ({
+        const players: TopPlayer[] = snapshot.docs.map((doc, index) => ({
           id: doc.id,
           displayName: doc.data().displayName || 'Anonymous',
           totalScore: doc.data().totalScore || 0,
           rank: index + 1,
+          profileImage: null,
+          profileImageLoaded: false,
         }));
-        setTopPlayers(players);
+
+        console.log('📋 Initial top 3 players loaded:', players.length, 'players');
+
+        // Fetch profile images for top 3 players
+        const updatedPlayers = await Promise.all(
+          players.map(async (player) => {
+            try {
+              console.log(`\n🔍 Fetching profile for ${player.displayName} (ID: ${player.id})`);
+              
+              const userDocRef = doc(db, 'users', player.id);
+              const userDoc = await getDoc(userDocRef);
+              
+              if (userDoc.exists()) {
+                const userData = userDoc.data();
+                console.log(`📋 ${player.displayName}: User data found`);
+                console.log(`📋 ${player.displayName}: Profile image exists:`, !!userData.profileImage);
+                
+                let profileImage = userData.profileImage;
+                
+                if (profileImage) {
+                  console.log(`📋 ${player.displayName}: Profile image length:`, profileImage.length);
+                  console.log(`📋 ${player.displayName}: Profile image starts with:`, profileImage.substring(0, 30));
+                  
+                  if (!profileImage.startsWith('data:')) {
+                    profileImage = `data:image/jpeg;base64,${profileImage}`;
+                    console.log(`✅ ${player.displayName}: Added data URI prefix`);
+                  }
+                  
+                  console.log(`✅ ${player.displayName}: Profile image ready`);
+                  return { ...player, profileImage, profileImageLoaded: true };
+                } else {
+                  console.log(`❌ ${player.displayName}: No profile image in user data`);
+                  return { ...player, profileImage: null, profileImageLoaded: true };
+                }
+              } else {
+                console.log(`❌ ${player.displayName}: No user document found`);
+                return { ...player, profileImage: null, profileImageLoaded: true };
+              }
+            } catch (error) {
+              console.error(`❌ ${player.displayName}: Error fetching profile:`, error);
+              return { ...player, profileImage: null, profileImageLoaded: true };
+            }
+          })
+        );
+
+        console.log('🎯 Profile images fetched for top 3 players');
+        console.log('📊 Results:', updatedPlayers.map(p => ({ 
+          name: p.displayName, 
+          hasProfileImage: !!p.profileImage,
+          profileImageLoaded: p.profileImageLoaded 
+        })));
+
+        setTopPlayers(updatedPlayers);
       } catch (error) {
         console.error('Error fetching top players:', error);
         // Fallback to dummy data if leaderboard fails
         setTopPlayers([
-          { id: '1', displayName: 'Elynn Lee', totalScore: 1500, rank: 1 },
-          { id: '2', displayName: 'James Tan', totalScore: 1200, rank: 2 },
-          { id: '3', displayName: 'Elliot Chew', totalScore: 1100, rank: 3 },
+          { id: '1', displayName: 'Elynn Lee', totalScore: 1500, rank: 1, profileImage: null, profileImageLoaded: true },
+          { id: '2', displayName: 'James Tan', totalScore: 1200, rank: 2, profileImage: null, profileImageLoaded: true },
+          { id: '3', displayName: 'Elliot Chew', totalScore: 1100, rank: 3, profileImage: null, profileImageLoaded: true },
         ]);
       }
     };
 
     fetchTop3();
   }, []);
+
+  // Avatar component similar to DiceRollGameScreen
+  const Avatar = ({ player, style }: { player: TopPlayer; style: any }) => {
+    console.log(`🖼️ Avatar render for ${player.displayName}:`, {
+      profileImageLoaded: player.profileImageLoaded,
+      hasProfileImage: !!player.profileImage,
+      profileImagePreview: player.profileImage ? player.profileImage.substring(0, 50) + '...' : 'null'
+    });
+
+    if (!player.profileImageLoaded) {
+      return (
+        <View style={[style, styles.avatarPlaceholder]}>
+          <ActivityIndicator size="small" color="#004d00" />
+        </View>
+      );
+    }
+
+    if (player.profileImage) {
+      return (
+        <Image
+          source={{ uri: player.profileImage }}
+          style={style}
+          onLoad={() => {
+            console.log(`✅ Avatar loaded successfully for ${player.displayName}`);
+          }}
+          onError={(error) => {
+            console.error(`❌ Avatar load error for ${player.displayName}:`, error.nativeEvent);
+          }}
+        />
+      );
+    }
+
+    console.log(`🔄 Using default avatar for ${player.displayName}`);
+    return (
+      <Image
+        source={require('../../assets/images/boy1.png')}
+        style={style}
+      />
+    );
+  };
 
   // Handler functions
   const handleStartNewGame = () => {
@@ -190,10 +296,7 @@ export default function HomeScreen() {
           {topPlayers.map((player) => (
             <View key={player.id} style={styles.leaderboardItem}>
               <View style={styles.playerInfo}>
-                <Image
-                  source={require('../../assets/images/boy1.png')}
-                  style={styles.playerAvatar}
-                />
+                <Avatar player={player} style={styles.playerAvatar} />
                 <Text style={styles.playerName}>{player.displayName}</Text>
               </View>
               <Text style={styles.playerScore}>{player.totalScore} pts</Text>
@@ -427,6 +530,13 @@ const styles = StyleSheet.create({
     height: 35,
     borderRadius: 17.5,
     marginRight: 12,
+    borderWidth: 2,
+    borderColor: '#004d00',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
   playerName: {
     fontSize: 16,

@@ -19,6 +19,8 @@ import {
   orderBy,
   getDocs,
   limit,
+  doc,
+  getDoc,
 } from 'firebase/firestore';
 
 const db = getFirestore();
@@ -36,6 +38,8 @@ export default function LeaderboardScreen() {
   const loadLeaderboard = async () => {
     try {
       setIsLoading(true);
+      console.log('🔄 Loading leaderboard data...');
+      
       // Changed from 'users' to 'leaderboard' to match your utility function
       const leaderboardQuery = query(
         collection(db, 'leaderboard'),
@@ -51,12 +55,64 @@ export default function LeaderboardScreen() {
           rank: index + 1,
           displayName: userData.displayName || 'Anonymous',
           email: userData.email || 'No email',
-          avatar: userData.avatar || require('../assets/images/boy1.png'),
           totalScore: userData.totalScore || 0,
+          profileImage: null,
+          profileImageLoaded: false,
         };
       });
 
-      setLeaderboardData(players);
+      console.log('📋 Initial leaderboard data loaded:', players.length, 'players');
+
+      // Fetch profile images for each player
+      const updatedPlayers = await Promise.all(
+        players.map(async (player) => {
+          try {
+            console.log(`\n🔍 Fetching profile for ${player.displayName} (ID: ${player.id})`);
+            
+            const userDocRef = doc(db, 'users', player.id);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log(`📋 ${player.displayName}: User data found`);
+              console.log(`📋 ${player.displayName}: Profile image exists:`, !!userData.profileImage);
+              
+              let profileImage = userData.profileImage;
+              
+              if (profileImage) {
+                console.log(`📋 ${player.displayName}: Profile image length:`, profileImage.length);
+                console.log(`📋 ${player.displayName}: Profile image starts with:`, profileImage.substring(0, 30));
+                
+                if (!profileImage.startsWith('data:')) {
+                  profileImage = `data:image/jpeg;base64,${profileImage}`;
+                  console.log(`✅ ${player.displayName}: Added data URI prefix`);
+                }
+                
+                console.log(`✅ ${player.displayName}: Profile image ready`);
+                return { ...player, profileImage, profileImageLoaded: true };
+              } else {
+                console.log(`❌ ${player.displayName}: No profile image in user data`);
+                return { ...player, profileImage: null, profileImageLoaded: true };
+              }
+            } else {
+              console.log(`❌ ${player.displayName}: No user document found`);
+              return { ...player, profileImage: null, profileImageLoaded: true };
+            }
+          } catch (error) {
+            console.error(`❌ ${player.displayName}: Error fetching profile:`, error);
+            return { ...player, profileImage: null, profileImageLoaded: true };
+          }
+        })
+      );
+
+      console.log('🎯 Profile images fetched for leaderboard');
+      console.log('📊 Results:', updatedPlayers.map(p => ({ 
+        name: p.displayName, 
+        hasProfileImage: !!p.profileImage,
+        profileImageLoaded: p.profileImageLoaded 
+      })));
+
+      setLeaderboardData(updatedPlayers);
     } catch (error) {
       console.error('Error loading leaderboard:', error);
     } finally {
@@ -88,20 +144,53 @@ export default function LeaderboardScreen() {
     return styles.rankNumber;
   };
 
+  // Avatar component similar to DiceRollGameScreen
+  const Avatar = ({ player, style }) => {
+    console.log(`🖼️ Avatar render for ${player.displayName}:`, {
+      profileImageLoaded: player.profileImageLoaded,
+      hasProfileImage: !!player.profileImage,
+      profileImagePreview: player.profileImage ? player.profileImage.substring(0, 50) + '...' : 'null'
+    });
+
+    if (!player.profileImageLoaded) {
+      return (
+        <View style={[style, styles.avatarPlaceholder]}>
+          <ActivityIndicator size="small" color="#004d00" />
+        </View>
+      );
+    }
+
+    if (player.profileImage) {
+      return (
+        <Image
+          source={{ uri: player.profileImage }}
+          style={style}
+          onLoad={() => {
+            console.log(`✅ Avatar loaded successfully for ${player.displayName}`);
+          }}
+          onError={(error) => {
+            console.error(`❌ Avatar load error for ${player.displayName}:`, error.nativeEvent);
+          }}
+        />
+      );
+    }
+
+    console.log(`🔄 Using default avatar for ${player.displayName}`);
+    return (
+      <Image
+        source={require('../assets/images/boy1.png')}
+        style={style}
+      />
+    );
+  };
+
   const renderPlayerRow = (player) => (
     <TouchableOpacity key={player.id} style={styles.playerRow}>
       <View style={styles.rankContainer}>
         <Text style={getRankStyle(player.rank)}>{getRankIcon(player.rank)}</Text>
       </View>
 
-      <Image
-        source={
-          typeof player.avatar === 'string'
-            ? { uri: player.avatar }
-            : player.avatar
-        }
-        style={styles.playerAvatar}
-      />
+      <Avatar player={player} style={styles.playerAvatar} />
 
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{player.displayName}</Text>
@@ -281,6 +370,13 @@ const styles = StyleSheet.create({
     height: 45,
     borderRadius: 22.5,
     marginRight: 15,
+    borderWidth: 2,
+    borderColor: '#004d00',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
   playerInfo: {
     flex: 1,
